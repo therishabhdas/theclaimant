@@ -1,0 +1,843 @@
+THE CLAIMANT - STARTING-STATE REFERENCE
+=================================================
+
+Purpose: World-state reference for a text-based political RPG.
+Version: 1.0
+Starting point: Immediately after King Robert I Baratheon's death, before Eddard Stark openly challenges the Lannister succession.
+Scope: Westeros only. The Wall and the Night's Watch are excluded as playable regions/systems. Lands outside Westeros are not described as locations. Some off-continent figures are mentioned only where they matter to the Westerosi succession.
+Continuity policy: Details vary between versions of the story. Where a detail is uncertain, it is marked unknown rather than invented.
+Nature of this document: A practical world-state bible, not an exhaustive gazetteer of every minor name ever mentioned.
+
+
+1. THE OPENING SNAPSHOT
+=======================
+
+Date and Moment
+---------------
+The game begins in the immediate aftermath of Robert Baratheon's death during the hunt. The king is dead; the Iron Throne has not yet been secured through an uncontested, lawful transfer of power. The capital is tense, but the realm has not yet entered open civil war. Eddard Stark has not publicly declared Joffrey illegitimate or openly moved against House Lannister. This is a deliberately narrow starting state built around the requested moment, not a claim that every scene in every version of the story aligns perfectly.
+
+What Is Publicly Known
+----------------------
+- King Robert I Baratheon is dead.
+- Queen Cersei Lannister and her children are in King's Landing.
+- Joffrey is treated by the royal court as Robert's eldest legitimate son and heir.
+- Eddard Stark is the Hand of the King and has authority, duties, enemies, and an unresolved investigation into Jon Arryn's death.
+- Jon Arryn, the previous Hand and Lord of the Eyrie, is dead.
+- Stannis Baratheon is at Dragonstone and is Robert's elder surviving brother.
+- Renly Baratheon is in King's Landing at the beginning of the political crisis.
+- The royal succession is vulnerable to dispute, but no realm-wide declaration or coordinated rebellion has yet settled the issue.
+- The great lords are watching the capital, weighing family ties, oaths, interests, and the likely balance of force.
+- The Greyjoy Rebellion ended years earlier. Balon Greyjoy remains Lord of the Iron Islands; Theon Greyjoy is a ward/hostage raised at Winterfell.
+- The Targaryen dynasty was overthrown in Robert's Rebellion. Viserys and Daenerys Targaryen survive in exile, but are not in Westeros at the start.
+- No war of succession has begun. Do not import later alliances, deaths, titles, betrayals, military outcomes, or character knowledge into the initial state.
+
+Private Knowledge and Secrets
+-----------------------------
+The game engine must track knowledge separately for each character. A fact known to the author or player is not automatically known to every character.
+
+- The central succession secret: Joffrey, Myrcella, and Tommen are biologically the children of Cersei Lannister and her twin brother Jaime Lannister, not Robert Baratheon. Ned's suspicion arises from the pattern of Baratheon black hair and the royal children's Lannister appearance, alongside Jon Arryn's investigation. At the chosen opening, do not assume every character knows this.
+- Cersei and Jaime know the truth of their relationship and the children's parentage.
+- Jon Arryn investigated the parentage of Robert's supposed children before his death. The precise chain of discovery and who knows what varies by version and point in the story.
+- Stannis has reason to suspect the truth and is a potential claimant, but the game must not assume that every lord knows his conclusions.
+- Littlefinger (Petyr Baelish) is an opportunist with a history of manipulation and a personal history involving Catelyn and Lysa. Do not give other characters automatic knowledge of his schemes.
+- Varys cultivates informants and has his own long game. His private aims are not public knowledge.
+- The exact intentions of Renly, Stannis, Littlefinger, Varys, and the Tyrells should be played as character-driven decisions rather than fixed future outcomes.
+
+Opening Political State
+-----------------------
+- Crown: King Robert is dead. Joffrey is the court's declared heir in practice, but the legitimacy question has not been openly resolved.
+- Hand: Eddard Stark.
+- Queen Regent / Queen Mother: Cersei Lannister.
+- Royal household: Joffrey, Myrcella, and Tommen are present in the capital.
+- Kingsguard: Ser Barristan Selmy is Lord Commander; Jaime Lannister is a Kingsguard knight; other serving members include Meryn Trant, Boros Blount, Mandon Moore, Preston Greenfield, and Arys Oakheart.
+- Small Council: Grand Maester Pycelle, Lord Petyr Baelish (Master of Coin), Lord Varys (Master of Whisperers), and other offices are present or in transition. Robert's death makes loyalty uncertain; avoid treating council members as a unified bloc.
+- North: House Stark remains the ruling house, with Robb Stark at Winterfell while Ned is in the capital. The North has not declared independence.
+- Vale: House Arryn is headed by young Robert Arryn, with Lysa Arryn controlling access and policy as his mother and regent.
+- Riverlands: House Tully remains loyal to the crown and bound to the Starks by marriage.
+- Iron Islands: House Greyjoy remains in place; Balon has not yet launched a new rebellion.
+- Westerlands: House Lannister is powerful, wealthy, and close to the throne through Cersei, Jaime, and Tyrion.
+- Reach: House Tyrell rules from Highgarden; its position is not yet committed to a later alliance.
+- Stormlands: The Baratheon brothers' competing interests make the region politically sensitive.
+- Crownlands: The capital and nearby lords are under direct royal influence.
+- Dorne: House Martell has long-standing grievances against the Lannisters over Elia Martell and her children, but no open Dornish uprising is underway.
+
+Gameplay Rules for Continuity Consistency
+-----------------------------------------
+1. The realm is called the Seven Kingdoms by tradition, but it has nine major regions/provinces in this period: the North, Vale, Riverlands, Iron Islands, Westerlands, Reach, Stormlands, Crownlands, and Dorne.
+2. A regional Great House is a paramount lordship, not necessarily a sovereign kingdom. Most regional houses owe fealty upward to a Great House and ultimately to the Iron Throne.
+3. Do not treat the Crownlands as an ancient independent kingdom; they are lands around King's Landing ruled directly by the Crown.
+4. Dorne retains distinctive customs and the title Prince/Princess of Dorne, and was incorporated by marriage rather than simply conquered and held like the other regions.
+5. The Riverlands are geographically exposed and historically contested; their lordships are divided among numerous houses.
+6. The North is vast and comparatively sparsely populated; distances and winter conditions matter.
+7. The Vale's mountain geography makes access difficult. The Eyrie is a defensible summer seat, not an ordinary city.
+8. House words, sigils, titles, and family ties are useful flavor, but the game should not turn them into automatic behavior. Characters can defy expectations.
+9. The Iron Throne's authority depends on armies, money, legitimacy, hostages, marriage alliances, and compliance-not merely on the king's command.
+10. No character may act on information they have not plausibly learned.
+
+
+2. THE REALM AT A GLANCE
+========================
+
+The Iron Throne and Royal Government
+------------------------------------
+- Capital: King's Landing.
+- Royal seat: The Red Keep, on Aegon's High Hill.
+- Throne: The Iron Throne, forged from swords surrendered by Aegon's defeated enemies.
+- Other major institutions: Small Council, Kingsguard, royal household, City Watch (gold cloaks), royal fleet, Faith of the Seven, maesters and the Citadel's raven network.
+- The king's writ is strongest near the capital and weaker where great lords control their own men, roads, castles, revenues, and justice.
+- A royal decree can be resisted, delayed, reinterpreted, or openly defied if the Crown lacks force or legitimacy.
+
+The Nine Regions and Their Great Houses
+---------------------------------------
+- The North - House Stark of Winterfell; Lord Eddard Stark; words: "Winter Is Coming."
+- The Vale of Arryn - House Arryn of the Eyrie; Lord Robert Arryn, under Lysa Arryn's guardianship; words: "As High as Honor."
+- The Riverlands - House Tully of Riverrun; Lord Hoster Tully; words: "Family, Duty, Honor."
+- The Iron Islands - House Greyjoy of Pyke; Lord Balon Greyjoy; words: "We Do Not Sow."
+- The Westerlands - House Lannister of Casterly Rock; Lord Tywin Lannister; words: "Hear Me Roar!" The family also uses "A Lannister Always Pays His Debts."
+- The Reach - House Tyrell of Highgarden; Lord Mace Tyrell; words: "Growing Strong."
+- The Stormlands - House Baratheon of Storm's End; Lord Renly Baratheon is the surviving brother most closely associated with the seat at this moment, while Stannis controls Dragonstone and Robert's royal line is disputed. Baratheon words: "Ours Is the Fury."
+- The Crownlands - directly ruled by the Crown; no single regional paramount house. House Baratheon of King's Landing holds the royal title through Robert and the presumed succession.
+- Dorne - House Nymeros Martell of Sunspear; Prince Doran Martell; words: "Unbowed, Unbent, Unbroken."
+
+Royal Dynasty and Succession
+----------------------------
+House Baratheon came to the throne after Robert's Rebellion. Robert's public heirs are Joffrey, Myrcella, and Tommen. If the children are excluded as illegitimate, the succession question shifts to Robert's brothers, Stannis and Renly, with Stannis senior by birth. Robert's bastards exist across the realm, but bastardy does not ordinarily place them ahead of legitimate heirs.
+
+House Targaryen was displaced. Viserys and Daenerys remain living dynastic claimants outside Westeros at the start, but their presence and future plans are not public knowledge to most Westerosi characters.
+
+
+3. THE NORTH
+============
+
+Overview
+--------
+The largest region of the realm: cold, forested, mountainous, marshy in the Neck, and sparsely settled compared with the south. The North has a strong First Men identity and many follow the Old Gods. Northern loyalty often runs through ancient custom, personal honor, and the Stark name. Travel is slow; winter can isolate castles and settlements.
+
+Great House
+-----------
+House Stark of Winterfell. Lord Eddard "Ned" Stark is in King's Landing as Hand. His eldest son Robb is at Winterfell and acts as the Stark family's senior presence in the North. Catelyn Stark is Ned's wife, born Tully. Their children are Robb, Sansa, Arya, Bran, and Rickon. Jon Snow is Ned's acknowledged bastard, raised with the family; his true parentage is not public knowledge and must not be revealed by default.
+
+Important Stark Family / Household
+----------------------------------
+- Eddard (Ned) Stark: Lord of Winterfell, Warden of the North, Hand of the King.
+- Catelyn Stark (née Tully): Lady of Winterfell; politically perceptive, fiercely protective of her children.
+- Robb Stark: eldest legitimate son and heir to Winterfell.
+- Sansa Stark: eldest daughter; betrothed to Joffrey at the opening.
+- Arya Stark: younger daughter; independent, restless, and resistant to courtly expectations.
+- Bran Stark: middle son; inquisitive and adventurous.
+- Rickon Stark: youngest son.
+- Jon Snow: acknowledged bastard; raised at Winterfell, not a legitimate Stark heir.
+- Benjen Stark: Ned's younger brother; associated with the Night's Watch, excluded from playable Wall/Night's Watch systems.
+- Lyanna Stark: Ned's deceased sister, central to Robert's Rebellion; her story and the truth surrounding her death are not common knowledge.
+- Maester Luwin: Winterfell's maester.
+- Ser Rodrik Cassel: master-at-arms.
+- Jory Cassel: captain of Ned's household guard in the capital.
+- Theon Greyjoy: Balon Greyjoy's son, raised as a ward/hostage at Winterfell after the Greyjoy Rebellion.
+- Osha: a wildling woman captured in the North.
+- Hodor: stablehand and servant at Winterfell.
+- Old Nan: elderly storyteller and servant.
+- Septa Mordane: Sansa and Arya's septa.
+- Jeyne Poole: Sansa's friend and daughter of Winterfell's steward.
+- Vayon Poole: steward of Winterfell.
+- Farlen: kennelmaster. Mikken: smith. Beth Cassel: Ser Rodrik's daughter.
+
+Major Northern Houses
+---------------------
+- House Bolton of the Dreadfort: one of the strongest northern houses; Lord Roose Bolton. Historically a rival to the Starks. Sigil: flayed man. Do not assume later betrayal has occurred.
+- House Karstark of Karhold: Lord Rickard Karstark; a cadet branch of the Starks, proud and militarily significant.
+- House Manderly of White Harbor: Lord Wyman Manderly; the North's major port and one of its wealthiest houses; follows the Faith of the Seven.
+- House Umber of the Last Hearth: Lord Greatjon Umber; fierce northern warriors.
+- House Glover of Deepwood Motte: Galbart and Robett Glover are important family members.
+- House Mormont of Bear Island: led by Maege Mormont; her daughter Dacey is a notable warrior. Jeor Mormont is Lord Commander of the Night's Watch and is outside the playable Wall system.
+- House Reed of Greywater Watch: Howland Reed; rulers of the crannogmen in the Neck, loyal to the Starks. Children include Jojen and Meera in later events; at the opening they are not yet active in the main court crisis.
+- House Cerwyn of Castle Cerwyn: a close Stark bannerman. House Tallhart of Torrhen's Square. House Hornwood of Hornwood.
+- House Ryswell of the Rills. House Dustin of Barrowton: Lady Barbrey Dustin; politically consequential and distrustful of the Starks in private. House Locke of Oldcastle.
+- Mountain clans and lesser houses: House Flint (multiple branches, including the mountain Flints), House Norrey, House Liddle, House Wull, House Burley, House Harclay, House Knott, House Slate of Blackpool, House Whitehill of Highpoint.
+- House Cassel: a household family rather than a paramount house; Ser Rodrik serves Winterfell.
+
+Northern Places
+---------------
+- Winterfell: ancestral Stark seat; castle, godswood, crypts, hot springs, yards, and surrounding town.
+- White Harbor: principal northern city and port; seat of House Manderly.
+- The Dreadfort (Bolton); Karhold (Karstark); The Last Hearth (Umber); Deepwood Motte (Glover); Bear Island (Mormont); Greywater Watch (Reed, a mobile/hidden crannogmen stronghold, not a conventional fixed castle); Castle Cerwyn; Torrhen's Square (Tallhart); Barrowton (Dustin, associated with ancient barrows and the First Men); Hornwood; Oldcastle (Locke); The Rills (Ryswell).
+- The Neck: marshy bottleneck between North and Riverlands; home of the crannogmen. Moat Cailin: ruined but strategically vital fortress controlling the causeway through the Neck.
+- The Wolfswood: extensive forest in the western North. The Bite: sea between the North and Vale. Cape Kraken: northern coast opposite the Iron Islands. Stony Shore: remote western coast. Flint's Finger: western peninsula and seat associated with House Flint. Sea Dragon Point: remote western peninsula. The White Knife: river running toward White Harbor. The Fever River: dangerous marshland river in the Neck.
+- Skagos: large island northeast of the North; inhabited by the Skagosi, whose reputation is grim. It is Westerosi territory.
+- The Three Sisters lie in the Bite and are generally associated with the Vale rather than the North; treat their jurisdiction carefully.
+
+Northern Political Position at Start
+------------------------------------
+The North is formally loyal to Robert's crown. Ned's position as Hand binds the Starks to the capital, while Robb remains responsible for Winterfell. Northern lords may disagree about southern politics, but none has declared the North independent. Theon is a living political hostage linking Winterfell to Pyke. The Starks' ties to House Tully strengthen their relationship with the Riverlands.
+
+
+4. THE VALE OF ARRYN
+====================
+
+Overview
+--------
+A mountainous eastern region protected by the Mountains of the Moon. The high valleys and narrow passes make it defensible but can make movement slow and dangerous. Gulltown is the region's major port and commercial city. The Vale's great lords have not committed to a civil-war faction at the opening.
+
+Great House
+-----------
+House Arryn of the Eyrie. Jon Arryn, Lord of the Eyrie and Hand of the King before Ned, has recently died. His son Robert Arryn is a young child and Lord of the Vale; his mother Lysa Arryn governs as regent. The Arryn words are "As High as Honor."
+
+Arryn Household and Important Characters
+----------------------------------------
+- Lord Jon Arryn: deceased; his death triggered the political crisis and investigation.
+- Lord Robert "Robin" Arryn: young heir, sickly and sheltered.
+- Lysa Arryn (née Tully): widow of Jon Arryn, sister of Catelyn Stark, mother and regent to Robert.
+- Ser Vardis Egen: a knight in service to the Vale. Maester Colemon: associated with Robert Arryn's care.
+- Petyr Baelish, "Littlefinger": born to a minor Vale house and fostered at Riverrun; now Master of Coin in King's Landing. He has personal ties to Catelyn and Lysa and maintains influence in the Vale through those ties.
+
+Major Vale Houses
+-----------------
+- House Royce of Runestone: one of the oldest and most powerful Vale houses; Lord Yohn Royce, known as Bronze Yohn. House Royce of the Gates of the Moon: a cadet branch; the Gates of the Moon serve as the lower stronghold for the Eyrie.
+- House Corbray of Heart's Home: lordly house known for martial prestige; Ser Lyn Corbray is a notable knight.
+- House Waynwood of Ironoaks: Lady Anya Waynwood; an influential Vale lady.
+- House Belmore of Strongsong; House Hunter of Longbow Hall; House Redfort of Redfort; House Templeton of Ninestars (a knightly house).
+- House Grafton of Gulltown: controls the major port; Lord Gerold Grafton.
+- House Baelish: minor Vale house from the Fingers; Petyr's family is not a Great House.
+- House Sunderland of the Three Sisters: rules the Sistermen; island culture differs from the mainland Vale.
+- Lesser Vale houses: Shett of Gulltown, Egen, Melcolm of Old Anchor, Tollett of the Grey Glen, Waxley of Wickenden, Lynderly of the Snakewood, Upcliff (Witch Isle), Hersy of Newkeep, Coldwater of Coldwater Burn, Moore (including Ser Hugh of the Vale, Jon Arryn's former squire), Hardyng.
+
+Vale Places
+-----------
+- The Eyrie: Arryn ancestral seat, high in the Mountains of the Moon; accessible only by a difficult ascent and guarded approaches.
+- The Gates of the Moon: lower castle guarding the mountain approach to the Eyrie.
+- Gulltown: major port and commercial city; seat of House Grafton.
+- Runestone (Royce); Ironoaks (Waynwood); Heart's Home (Corbray); Strongsong (Belmore); Longbow Hall (Hunter); Redfort (Redfort); Ninestars (Templeton); Wickenden (Waxley); Old Anchor (Melcolm); The Grey Glen (Tollett); Snakewood (Lynderly).
+- The Fingers: broken peninsula and coastal lands associated with minor houses including Baelish.
+- The Three Sisters: islands in the Bite, with Sistermen customs and House Sunderland.
+- The Bloody Gate: fortified pass through the Mountains of the Moon. The High Road: route connecting the Vale to the Riverlands and King's Landing.
+- The Mountains of the Moon: mountain range enclosing the Vale. The Vale of Arryn: fertile highlands inside the mountain ring.
+
+Vale Political Position at Start
+--------------------------------
+Lysa is suspicious of the Lannisters and has withdrawn from King's Landing with Robert Arryn. She has not publicly joined any rebellion. The Vale's armies are not automatically available to the Crown, Ned, or the Tullys; Lysa's decision and the great Vale lords' willingness to follow her must be represented as political variables.
+
+
+5. THE RIVERLANDS
+=================
+
+Overview
+--------
+A fertile, densely settled central region crossed by the Trident and its forks. It is strategically exposed, has no strong natural border on most sides, and has repeatedly been fought over. Numerous lords control castles, river crossings, mills, fields, and ferries. The Riverlands are not one of the ancient seven pre-Conquest kingdoms in the same way as the North or Vale, and their history of conquest has left political complexity.
+
+Great House
+-----------
+House Tully of Riverrun. Lord Hoster Tully is old and ill. His children are Edmure Tully, Catelyn Stark, and Lysa Arryn. Tully words: "Family, Duty, Honor."
+
+Important Tully Family and Associates
+-------------------------------------
+- Lord Hoster Tully: Lord of Riverrun, father of Catelyn, Lysa, and Edmure.
+- Edmure Tully: heir to Riverrun; protective of his people, sometimes impulsive.
+- Catelyn Stark: eldest daughter, wife of Ned Stark. Lysa Arryn: younger daughter, widow of Jon Arryn.
+- Brynden Tully, "the Blackfish": Hoster's brother, an experienced and independent commander.
+- Ser Desmond Grell and Ser Robin Ryger: Tully household knights. Maester Vyman: associated with Riverrun.
+- Roslin Frey: one of Walder Frey's daughters; her later marriage role is not yet active.
+
+Major Riverlands Houses
+-----------------------
+- House Frey of the Twins: Lord Walder Frey, ancient, fertile family tree, numerous sons, daughters, and descendants; controls a crucial crossing of the Green Fork. The Freys are Tully bannermen but bargain hard and are notorious for putting their own interests first.
+- House Blackwood of Raventree Hall: Lord Tytos Blackwood; ancient First Men house, worships the Old Gods. House Bracken of Stone Hedge: rival of House Blackwood for generations.
+- House Mallister of Seagard: Lord Jason Mallister; coastal defenders against ironborn raids.
+- House Piper of Pinkmaiden: Lord Clement Piper. House Vance of Wayfarer's Rest and House Vance of Atranta: separate branches; distinguish them.
+- House Mooton of Maidenpool: controls an important eastern town and port. House Darry of Darry: an old riverlands house with complicated loyalties after Robert's Rebellion.
+- House Whent of Harrenhal: House Whent once held Harrenhal; the family's fortunes have declined and the seat's current status is politically complicated. Lady Shella Whent is associated with the house at the beginning of the story. House Strong: historically associated with Harrenhal; not a dominant current power at the opening.
+- Lesser Riverlands houses: Ryger of Willow Wood, Smallwood of Acorn Hall, Roote of Lord Harroway's Town, Haigh of the Lord's Mill, Erenford of Greenpoint, Goodbrook, Lychester, Charlton, Keath, Vypren, Wayn, Wode, Blanetree, Hawick, Blackmyre.
+- Extinct or historical lines: House Mudd, House Justman, House Teague (ancient royal dynasties of the Riverlands), House Qoherys (historically associated with Harrenhal).
+
+The Freys - special game note: Walder Frey is Lord of the Crossing and controls the Twins, two castles joined by a bridge over the Green Fork. The crossing is strategically valuable because armies and merchants may have few practical alternatives. Walder's many descendants create a dense network of potential heirs, marriage matches, hostages, rivalries, and disputed claims. Important named Freys include Stevron, Lame Lothar, Black Walder, Walder Rivers (a bastard), Perwyn, Olyvar, and Roslin, among numerous other sons and daughters. Treat the family as a faction with internal divisions, not a single-minded unit.
+
+Riverlands Places
+-----------------
+- Riverrun: seat of House Tully, built where the Tumblestone meets the Red Fork.
+- The Twins: seat of House Frey, twin castles and bridge over the Green Fork.
+- Harrenhal: immense, partially ruined castle beside the Gods Eye; strategically important but expensive to maintain and burdened by a grim history.
+- Seagard (Mallister); Raventree Hall (Blackwood); Stone Hedge (Bracken); Maidenpool (Mooton, a walled town and port); Darry (Darry); Pinkmaiden (Piper); Wayfarer's Rest and Atranta (Vance branches); Acorn Hall (Smallwood); Lord Harroway's Town (Roote); Willow Wood (Ryger).
+- Saltpans: small coastal settlement and port. Fairmarket: market town on the Blue Fork. Stoney Sept: town with religious and strategic significance.
+- The Inn at the Crossroads: roadside inn near the junction of the kingsroad and riverlands routes; a common meeting point.
+- The Quiet Isle: religious retreat on an island in the Trident. The Gods Eye: large lake with the Isle of Faces. The Isle of Faces: sacred island associated with the Old Gods and the Children of the Forest; difficult to access.
+- The Red Fork, Blue Fork, and Green Fork: main branches of the Trident. The Trident: river system central to the region. The Tumblestone: river by Riverrun.
+
+Riverlands Political Position at Start
+--------------------------------------
+The Tullys are connected to Ned through Catelyn and to Lysa through marriage. The Riverlands are not at war. Frey, Blackwood, Bracken, Mallister, and other houses have their own priorities and feuds. A royal crisis could make the region a corridor for armies and a battlefield even if its lords do not seek war.
+
+
+6. THE IRON ISLANDS
+===================
+
+Overview
+--------
+A harsh archipelago west of the mainland. Ironborn culture prizes ships, raiding, salt-water traditions, and the Drowned God. The old practice of reaving and taking the "iron price" remains a cultural ideal for some, though the realm has tried to restrain it. The Greyjoy Rebellion was defeated about nine years before the opening; Balon Greyjoy's surviving son Theon was taken to Winterfell as a ward/hostage.
+
+Great House
+-----------
+House Greyjoy of Pyke. Lord Balon Greyjoy rules. His living children at the opening include Asha (also called Yara) and Theon. His sons Rodrik and Maron died during the Greyjoy Rebellion. His wife is Alannys Harlaw. Greyjoy words: "We Do Not Sow."
+
+Important Ironborn Characters
+-----------------------------
+- Balon Greyjoy: Lord of the Iron Islands; proud and resentful of defeat.
+- Asha Greyjoy (also called Yara): Balon's daughter, a capable ship captain and political actor.
+- Theon Greyjoy: Balon's son, raised at Winterfell as a hostage/ward; divided loyalties.
+- Alannys Harlaw: Balon's wife, from House Harlaw.
+- Aeron Greyjoy, "Damphair": Balon's brother, a priest of the Drowned God.
+- Euron Greyjoy, "Crow's Eye": Balon's brother, absent from the opening political center; his later actions must not be imported into the initial state.
+- Victarion Greyjoy: Balon's brother and a powerful captain.
+- Dagmer Cleftjaw: veteran ironborn warrior and captain. Rodrik Harlaw, "the Reader": Lord of Harlaw, learned and influential. Qarl the Maid: Asha's companion. Harras Harlaw: a notable Harlaw knight.
+
+Major Iron Islands Houses
+-------------------------
+- House Harlaw of Ten Towers: the wealthiest and most populous of the islands' houses; Lord Rodrik Harlaw.
+- House Botley of Lordsport: an influential Pyke-area house. House Drumm of Old Wyk: known for martial traditions; Lord Dunstan Drumm. House Blacktyde of Blacktyde.
+- House Goodbrother: several branches across Great Wyk, including Hammerhorn.
+- Other island houses: Orkwood and Tawney of Orkmont, Wynch of Iron Holt, Myre of Harlaw, Saltcliffe and Sunderly of Saltcliffe, Merlyn of Pebbleton, Sparr of Great Wyk, Farwynd of Lonely Light and other Farwynd branches, Volmark, Stonetree of Harlaw, Humble, Sharp.
+- These houses are not all equally powerful; their fleets, captains, and kin networks should be modeled individually.
+
+Iron Islands Places
+-------------------
+- Pyke: seat of House Greyjoy, built across sea stacks joined by bridges.
+- Lordsport: port settlement near Pyke, associated with House Botley.
+- Ten Towers: seat of House Harlaw on Harlaw. Harlaw: largest and most prosperous island.
+- Old Wyk: sacred and ancient island, associated with the Kingsmoot tradition and House Drumm. Hammerhorn: seat of a branch of House Goodbrother.
+- Great Wyk, Orkmont, Blacktyde, Saltcliffe: major islands with noble seats. Iron Holt: seat of House Wynch. Lonely Light: remote western island associated with House Farwynd.
+- The Stony Shore and Cape Kraken on the mainland face the Iron Islands across the sea. The Sunset Sea surrounds the western side of the archipelago.
+
+Iron Islands Political Position at Start
+----------------------------------------
+Balon is outwardly subordinate to the Iron Throne after defeat but remains resentful. Theon is leverage against renewed rebellion. No second rebellion has begun. Do not presume Asha/Yara's later actions, Euron's return, or a Kingsmoot at this stage.
+
+
+7. THE WESTERLANDS
+==================
+
+Overview
+--------
+A wealthy western region of hills, mines, gold, and fortified coastal cities. House Lannister's wealth supports its political influence, household troops, patronage, and ability to finance allies. The region is ruled from Casterly Rock, with Lannisport as its major city.
+
+Great House
+-----------
+House Lannister of Casterly Rock. Lord Tywin Lannister is the patriarch and former Hand of the King. His children are Cersei, Jaime, and Tyrion. His wife Joanna is dead. Lannister words are "Hear Me Roar!" The phrase "A Lannister Always Pays His Debts" is a widely known family maxim, not the formal house words.
+
+Important Lannister Characters
+------------------------------
+- Tywin Lannister: Lord of Casterly Rock; calculating, disciplined, and determined to preserve his house's power.
+- Cersei Lannister: queen, Robert's widow, mother of Joffrey, Myrcella, and Tommen; twin of Jaime.
+- Jaime Lannister: Cersei's twin, Kingsguard knight known as the Kingslayer.
+- Tyrion Lannister: younger son of Tywin; intelligent, witty, politically observant, and often underestimated.
+- Kevan Lannister: Tywin's younger brother and trusted military/political adviser.
+- Genna Lannister: Tywin's sister, married into House Frey.
+- Lancel Lannister: Kevan's son and a squire at court; involved in Robert's final hunt.
+- Ser Addam Marbrand: trusted Lannister commander. Ser Gregor Clegane, "the Mountain": brutal knight and Lannister bannerman. Sandor Clegane, "the Hound": Gregor's younger brother; Joffrey's sworn shield.
+- Daven Lannister and Stafford Lannister: Lannister kin and commanders in the family's wider military network.
+- Maester Creylen and other Rock household retainers may be used as supporting NPCs, but avoid inventing exact offices where the record is unclear.
+
+Major Westerlands Houses
+------------------------
+- House Lefford of the Golden Tooth: controls a strategic pass into the Westerlands.
+- House Marbrand of Ashemark: a leading Lannister bannerman.
+- House Crakehall of Crakehall: powerful martial house; Ser Burton Crakehall and other family members serve the Lannisters.
+- House Brax of Hornvale: significant western house. House Farman of Faircastle: naval and coastal house.
+- House Westerling of the Crag: an old house with a diminished fortune. House Payne: a Lannister bannerman family; Ser Ilyn Payne serves as royal executioner.
+- House Clegane: landed knights rather than a Great House; Gregor and Sandor's family.
+- Other western houses: Serrett of Silverhill, Swyft of Cornfield, Lydden of Deep Den, Prester of Feastfires, Banefort of Banefort, Plumm, Jast, Yarwyck, Sarsfield, Vikary, Turnberry, Clifton, Lorch, Greenfield, Estren, Hawthorne.
+- House Tarbeck and House Reyne: historically important former houses destroyed by Tywin in his youth; their fall shaped his reputation.
+
+Westerlands Places
+------------------
+- Casterly Rock: ancestral seat of House Lannister, a massive fortress carved into a coastal promontory.
+- Lannisport: major city and port beneath the Rock; wealthy, populous, and strategically important.
+- The Golden Tooth: fortress guarding the main eastern approach into the Westerlands.
+- Ashemark (Marbrand); Crakehall (Crakehall); Hornvale (Brax); Faircastle (Farman); The Crag (Westerling); Silverhill (Serrett); Cornfield (Swyft); Deep Den (Lydden); Feastfires (Prester); Banefort (Banefort); Sarsfield (Sarsfield).
+- Tarbeck Hall and Castamere: destroyed strongholds of houses crushed by Tywin; ruins and memory remain politically resonant.
+- The hills and gold mines: primary source of Lannister wealth. The Sunset Sea: western coast.
+
+Westerlands Political Position at Start
+---------------------------------------
+Tywin is not physically in King's Landing at the start of this snapshot; he is at his western seat/lands unless the game deliberately changes the exact staging. Cersei, Jaime, and Tyrion are in the capital or moving through the royal crisis. The Lannisters are powerful but do not automatically control the whole Small Council or every royal institution.
+
+
+8. THE REACH
+============
+
+Overview
+--------
+The most fertile and populous region, with broad farmlands, orchards, rivers, knights, tourneys, and wealthy towns. Its manpower and food supply make it strategically essential. Oldtown is one of the greatest cities of Westeros and the home of the Citadel and the Faith's ancient religious center.
+
+Great House
+-----------
+House Tyrell of Highgarden. Lord Mace Tyrell rules; his mother Olenna Redwyne, the Queen of Thorns, is politically sharp. His children include Willas, Garlan, Loras, and Margaery. The Tyrells were raised to Highgarden after House Gardener's extinction during Aegon's Conquest. Words: "Growing Strong."
+
+Important Tyrell Characters
+---------------------------
+- Mace Tyrell: Lord of Highgarden, proud of his family's rank and influence.
+- Olenna Tyrell (née Redwyne): Mace's mother, sharp-tongued political strategist.
+- Willas Tyrell: eldest son and heir. Garlan Tyrell: skilled knight and second son.
+- Loras Tyrell: "Knight of Flowers," celebrated knight; Renly Baratheon's close companion and a complex political ally.
+- Margaery Tyrell: Mace's daughter; marriage alliances are central to her family's strategy.
+- Paxter Redwyne: Lord of the Arbor and a powerful naval ally of the Tyrells. Randyll Tarly: formidable marcher lord and commander.
+- Randyll's son Samwell is not a major political actor in Westeros at this opening; he is associated with the Night's Watch and excluded from the playable Wall system.
+- Lord Leyton Hightower and his daughter Malora are influential but reclusive figures in Oldtown.
+
+Major Reach Houses
+------------------
+- House Hightower of the Hightower in Oldtown: ancient, extremely wealthy and influential; Lord Leyton Hightower.
+- House Redwyne of the Arbor: controls a major fleet and vineyards; Lord Paxter Redwyne.
+- House Tarly of Horn Hill: Lord Randyll Tarly; known for military discipline.
+- House Rowan of Goldengrove: major Reach house. House Florent of Brightwater Keep: proud house with claims of older royal descent; Lord Alester Florent.
+- House Fossoway of Cider Hall: prominent house; there are green-apple and red-apple branches.
+- House Oakheart of Old Oak: marcher/coastal house. House Crane of Red Lake. House Merryweather of Longtable: Lord Orton Merryweather and his wife Taena become relevant in court politics later.
+- Other Reach houses: Beesbury of Honeyholt, Ashford of Ashford, Caswell of Bitterbridge, Peake of Starpike, Webber of Coldmoat, Chester of Greenshield, Hewett of Oakenshield, Serry of Southshield, Grimm of Greyshield, Costayne of Three Towers, Bulwer of Blackcrown, Ambrose, Meadows of Grassy Vale, Vyrwel of Darkdell, Mullendore of Uplands, Orme, Risley, Stackhouse, Uffering, Varner, Willum.
+- The Shield Islands' lords are especially relevant to naval defense.
+
+Reach Places
+------------
+- Highgarden: seat of House Tyrell, surrounded by fertile lands and gardens.
+- Oldtown: major city, port, home of the Citadel and the Starry Sept; one of the oldest cities in Westeros.
+- The Hightower: lighthouse and fortress of House Hightower in Oldtown. The Citadel: institution where maesters train; located in Oldtown. The Starry Sept: historic religious center in Oldtown.
+- The Arbor: large island and seat of House Redwyne; source of wine and naval power.
+- Horn Hill (Tarly); Brightwater Keep (Florent); Goldengrove (Rowan); Cider Hall (Fossoway, red-apple branch); New Barrel (green-apple Fossoways); Old Oak (Oakheart); Red Lake (Crane); Longtable (Merryweather); Honeyholt (Beesbury); Ashford (Ashford; tourney ground); Bitterbridge (Caswell; crossing on the Mander); Starpike (Peake); Coldmoat (Webber).
+- The Shield Islands: four islands-Greenshield, Oakenshield, Southshield, and Greyshield-protecting the Mander's mouth and western coast.
+- Tumbleton: town near the Crownlands/Reach border. The Mander: major river running through the Reach. The Honeywine: river near Oldtown. The Whispering Sound and the Arbor waters: important naval approaches.
+
+Reach Political Position at Start
+---------------------------------
+The Tyrells are powerful but not yet committed to the later Lannister alliance. Margaery is unmarried at this point in the selected snapshot unless the game explicitly advances the timeline. Renly's relationship with Loras is politically sensitive. The Reach's food, knights, and fleet make it one of the realm's decisive swing regions.
+
+
+9. THE STORMLANDS
+=================
+
+Overview
+--------
+A rugged southeastern region of forests, rain, rocky coasts, and storm-battered castles. It has a martial reputation and contains several strategically important marcher houses along the Dornish border. House Baratheon rules from Storm's End, but Robert's death has made the Baratheon family's internal succession question urgent.
+
+Great House
+-----------
+House Baratheon of Storm's End. The Baratheon brothers are Robert, Stannis, and Renly. Robert is dead. Stannis controls Dragonstone, while Renly is in King's Landing at the opening and has court connections. The Stormlands' precise political alignment is unsettled. Words: "Ours Is the Fury."
+
+Important Baratheon Characters
+------------------------------
+- Robert Baratheon: deceased king; his death is the starting trigger.
+- Stannis Baratheon: Robert's elder surviving brother; stern, dutiful, and a serious claimant if Joffrey's legitimacy is challenged.
+- Renly Baratheon: youngest brother; charismatic, popular at court, and politically ambitious.
+- Selyse Florent: Stannis's wife, based at Dragonstone; her family ties connect Stannis to the Reach.
+- Shireen Baratheon: Stannis and Selyse's daughter.
+- Ser Davos Seaworth: former smuggler ennobled by Stannis; trusted adviser and naval commander.
+- Ser Cortnay Penrose: castellan of Storm's End, prominent in later events.
+- Ser Loras Tyrell is linked to Renly and is a Reachman, not a Baratheon bannerman.
+- Brienne of Tarth: a noblewoman from Tarth, a skilled warrior; her future allegiance is not fixed at this starting point.
+
+Major Stormlands Houses
+-----------------------
+- House Estermont of Greenstone: Robert's mother's family; Lord Estermont.
+- House Tarth of Evenfall Hall: rules the island of Tarth; Brienne is its heir.
+- House Swann of Stonehelm: a powerful marcher/coastal house; Ser Balon Swann is a Kingsguard knight.
+- House Selmy of Harvest Hall: Barristan Selmy's birth house. House Dondarrion of Blackhaven: marcher house; Beric Dondarrion is a notable knight.
+- House Caron of Nightsong: marcher lords. House Penrose of Parchments.
+- House Connington of Griffin's Roost: once prominent royalist house; Jon Connington is exiled at the start and his location is outside Westeros.
+- Other Stormlands houses: Wylde of Rain House, Fell of Felwood, Morrigen of Crow's Nest, Grandison of Grandview, Buckler of Bronzegate, Trant (including Ser Meryn Trant, a Kingsguard knight), Musgood, Horpe, Peasebury, Errol of Haystack Hall, Wagstaff, Staedmon of Broad Arch, Toyne, Cafferen of Fawnton, Rogers of Amberly, Lonmouth.
+- House Seaworth: Davos's newly ennobled house; his sons are useful minor characters.
+- House Baratheon of Dragonstone: Stannis's branch/household based at Dragonstone.
+
+Stormlands Places
+-----------------
+- Storm's End: ancestral Baratheon seat, famed for its massive walls and resistance to storms.
+- Dragonstone: island fortress and former Targaryen seat; Stannis's current stronghold. Administratively associated with the Crownlands but central to Baratheon succession.
+- Greenstone (Estermont); Evenfall Hall (Tarth); Stonehelm (Swann); Harvest Hall (Selmy); Blackhaven (Dondarrion); Nightsong (Caron); Parchments (Penrose); Griffin's Roost (Connington); Rain House (Wylde); Felwood (Fell); Crow's Nest (Morrigen); Grandview (Grandison); Bronzegate (Buckler); Haystack Hall (Errol); Broad Arch (Staedmon); Fawnton (Cafferen); Amberly (Rogers).
+- The Rainwood: extensive forest. Shipbreaker Bay: stormy sea around Storm's End and Tarth. Cape Wrath: rugged southern cape.
+- The Dornish Marches: borderlands between Stormlands and Dorne, with a history of raids and wars. The Wendwater: river flowing toward Blackwater Bay.
+
+Stormlands Political Position at Start
+--------------------------------------
+The Baratheon name still commands legitimacy, but the family is divided by geography and interests. Stannis is senior by birth; Renly has court popularity and connections; Robert's purported children are publicly treated as heirs. The Stormlands' bannermen will not all make the same choice without negotiation.
+
+
+10. THE CROWNLANDS
+==================
+
+Overview
+--------
+The Crownlands are the lands around Blackwater Bay and King's Landing, ruled directly by the Iron Throne rather than by a single regional Great House. The region contains the capital, royal roads, nearby ports, small castles, and the strategic approaches to the bay. Dragonstone is geographically and politically tied to this region, although its lord is Stannis Baratheon.
+
+King's Landing
+--------------
+The capital stands where the Blackwater Rush meets Blackwater Bay. It is crowded, unequal, politically volatile, and dependent on grain and trade brought from other regions. Its districts, gates, docks, taverns, brothels, septs, markets, and alleys are all usable locations.
+
+- The Red Keep: royal castle and seat of government. The Iron Throne: throne room within the Red Keep.
+- The Great Sept of Baelor: principal sept in the capital; its steps and plaza are public religious and ceremonial space.
+- The Tower of the Hand: residence and offices of the Hand. Maegor's Holdfast: heavily protected royal residence within the Red Keep.
+- The royal bedchambers, council chamber, throne room, rookery, kitchens, armory, barracks, dungeons, and the Great Hall for feasts, audiences, and court ceremonies.
+- The godswood: a small sacred grove within the Red Keep. The Dragonpit: ruined Targaryen dragon enclosure on Rhaenys's Hill.
+- Named streets: Street of Flour, Street of Steel, Street of Sisters, Street of Silk. Flea Bottom: poor, crowded district with taverns and narrow alleys. The River Row and fishmarket: commercial districts by the river and docks.
+- City gates: the Mud Gate, River Gate, King's Gate, Gate of the Gods, Lion Gate, and Old Gate.
+- The Blackwater Rush and Blackwater Bay: commercial and naval approaches. The city walls and gates: critical to defense and control. The harbor and royal fleet anchorage.
+- The Alchemists' Guild: the guild of pyromancers, with influence rooted in wildfire lore.
+
+Royal Court and Government Characters
+-------------------------------------
+- Eddard Stark: Hand of the King. Cersei Lannister: queen and mother of the presumed heirs.
+- Joffrey Baratheon (biologically Lannister): eldest presumed royal son, arrogant and cruel. Myrcella Baratheon and Tommen Baratheon (biologically Lannister): the other royal children.
+- Jaime Lannister: Kingsguard, queen's twin. Tyrion Lannister: member of the royal family, returning to the capital around this period depending on the chosen exact scene.
+- Grand Maester Pycelle: royal adviser and senior maester. Petyr Baelish, "Littlefinger": Master of Coin. Varys: Master of Whisperers.
+- Ser Barristan Selmy: Lord Commander of the Kingsguard. Ser Ilyn Payne: royal executioner.
+- Kingsguard: Ser Meryn Trant, Ser Boros Blount, Ser Mandon Moore, Ser Preston Greenfield, Ser Arys Oakheart.
+- Ser Aron Santagar: master-at-arms in the Red Keep. Janos Slynt: commander of the City Watch at this stage; corrupt and ambitious. Allar Deem: City Watch officer associated with Slynt.
+- Vayon Poole: steward to Ned Stark's household. Jory Cassel: captain of Ned's guards. Tomard: Ned's guard, nicknamed Fat Tom.
+- Hugh of the Vale: former squire to Jon Arryn, a witness to the recent past. Ser Hugh's death is a later event; do not include it as already happened at the opening unless deliberately advancing time.
+- Lancel Lannister: Robert's squire during the hunt.
+- Syrio Forel: Braavosi sword instructor hired for Arya; although born outside Westeros, he is in King's Landing and relevant to the story.
+- Chataya: proprietor of a high-end brothel. Alayaya: Chataya's daughter and an ally of Tyrion. Tobho Mott: armorer in King's Landing. Gendry: Robert's unacknowledged bastard, apprenticed as a smith in the capital. Barra: infant daughter of Robert and a prostitute.
+- Varys's informants, Littlefinger's agents, the City Watch, and the guilds are factional networks rather than a single unified organization.
+
+Crownlands Houses and Lordships
+-------------------------------
+- House Rosby of Rosby: a small but strategically placed Crownlands house. House Stokeworth of Stokeworth: Lady Tanda Stokeworth; daughters include Falyse and Lollys.
+- House Rykker of Duskendale: controls the secondary port of Duskendale. House Buckwell of Antlers. House Staunton of Rook's Rest.
+- House Massey of Stonedance. House Bar Emmon of Sharp Point. House Brune of Brownhollow and the Dyre Den: two branches/seats associated with Crackclaw Point.
+- House Celtigar of Claw Isle: an old Valyrian-descended house, loyal to the Crown in principle. House Velaryon of Driftmark: another old Valyrian-descended house with a significant fleet; Lord Monford Velaryon at this point. House Sunglass of Sweetport Sound.
+- House Darklyn of Duskendale: formerly ruled Duskendale; destroyed after the Defiance of Duskendale, with surviving branches and descendants uncertain. House Hollard: largely destroyed after the Defiance of Duskendale; Ser Dontos Hollard survives as a court figure.
+- Other Crownlands houses: Crabb (associated with the Whispers and Crackclaw Point), Wode, Hogg, Chyttering, Hardy, Pyle, Thorne, Rambton, Wendwater, and minor houses along the river and kingswood.
+- House Waters is a surname given to noble bastards born around Blackwater Bay; it is not a normal landed house.
+
+Crownlands Places Outside the Capital
+-------------------------------------
+- Dragonstone: seat of Stannis Baratheon, fortress on a volcanic island in Blackwater Bay.
+- Driftmark (Velaryon); Claw Isle (Celtigar); Duskendale (Rykker); Rosby (Rosby); Stokeworth (Stokeworth); Antlers (Buckwell); Rook's Rest (Staunton); Stonedance (Massey); Sharp Point (Bar Emmon); Sweetport Sound (Sunglass).
+- The Dyre Den and Brownhollow: Brune seats on Crackclaw Point. The Whispers: ruined/old Crabb seat on Crackclaw Point. Crackclaw Point: rugged peninsula with local clans and distinctive loyalties.
+- Massey's Hook: peninsula south of King's Landing. The Kingswood: royal hunting forest south of the capital.
+- The Blackwater Rush: river running into Blackwater Bay. Blackwater Bay: major eastern inlet and maritime approach. The Wendwater: river through the kingswood area.
+- The kingsroad: principal overland route connecting the capital with the North and south. The Roseroad: route toward the Reach. The goldroad: route toward the Westerlands.
+
+Crownlands Political Position at Start
+--------------------------------------
+The capital is the realm's political center but not automatically safe. The City Watch's loyalty, the Kingsguard's orders, the gates, food supply, court access, and control of the royal children are crucial. Stannis's possession of Dragonstone gives him a defensible base and naval position. Crownlands houses are comparatively close to royal power but may hedge when succession is uncertain.
+
+
+11. DORNE
+=========
+
+Overview
+--------
+The southernmost region, dry and hot in much of its interior, with deserts, red mountains, river valleys, and a long coast. Dornish customs differ from those in much of Westeros: inheritance is not restricted to male heirs, and the title Prince/Princess of Dorne is retained. Dorne resisted Aegon's Conquest and entered the realm later through dynastic marriage. It has a history of conflict with the Stormlands and the Reach.
+
+Great House
+-----------
+House Nymeros Martell of Sunspear. Prince Doran Martell rules; his brother Oberyn is the Red Viper. Doran's children are Arianne, Quentyn, and Trystane. Martell words: "Unbowed, Unbent, Unbroken."
+
+Important Martell Characters
+----------------------------
+- Prince Doran Martell: cautious, deliberate ruler of Dorne.
+- Oberyn Martell: Doran's younger brother, renowned warrior and lover of danger; carries deep anger over the deaths of his sister Elia and her children.
+- Elia Martell: deceased wife of Rhaegar Targaryen, murdered during Robert's Rebellion; mother of Rhaenys and Aegon Targaryen.
+- Arianne Martell: Doran's daughter and heir. Quentyn Martell: Doran's son. Trystane Martell: youngest son; betrothed to Myrcella.
+- Ellaria Sand: Oberyn's partner and mother of several Sand Snakes.
+- The Sand Snakes: Oberyn's acknowledged bastard daughters, including Obara, Nymeria, Tyene, Sarella, Elia Sand, Obella, Dorea, and Loreza. Which are active in a given continuity varies.
+- Areo Hotah: Doran's bodyguard and captain. Maester Caleotte: Doran's maester.
+
+Major Dornish Houses
+--------------------
+- House Yronwood of Yronwood: powerful rival/second house, sometimes called the Bloodroyal; Lord Anders Yronwood.
+- House Dayne of Starfall: ancient house known for the sword Dawn and the Sword of the Morning tradition; Lord Edric Dayne is a younger member, while older figures include Ser Arthur Dayne, deceased.
+- House Fowler of Skyreach: marcher house. House Manwoody of Kingsgrave. House Allyrion of Godsgrace. House Blackmont of Blackmont.
+- House Qorgyle of Sandstone. House Uller of Hellholt. House Wyl of Wyl. House Dalt of Lemonwood. House Gargalen of Salt Shore. House Santagar of Spottswood. House Toland of Ghost Hill. House Vaith of the Red Dunes. House Jordayne of the Tor.
+- Lesser Dornish houses: Drinkwater, Wells, Ladybright, Shell.
+- House Yronwood's bannermen and the marcher houses may have longstanding rivalries with Stormlanders.
+
+Dorne Places
+------------
+- Sunspear: seat of House Martell and the political center of Dorne. The Shadow City: settlement clustered around Sunspear.
+- The Water Gardens: Martell palace and retreat outside Sunspear, associated with the ruling family.
+- Starfall: seat of House Dayne, near the Torrentine. Yronwood: seat of House Yronwood, guarding a key pass.
+- Skyreach (Fowler); Kingsgrave (Manwoody); Godsgrace (Allyrion); Blackmont (Blackmont); Sandstone (Qorgyle); Hellholt (Uller); Wyl (Wyl); Lemonwood (Dalt); Salt Shore (Gargalen); Spottswood (Santagar); Ghost Hill (Toland); The Tor (Jordayne); Vaith (Vaith).
+- The Greenblood: major river in Dorne; the orphans of the Greenblood maintain distinctive Rhoynish traditions. The Torrentine: river in the west of Dorne.
+- The Boneway: mountain pass connecting Dorne to the Stormlands. The Prince's Pass: another important route through the Red Mountains. The Red Mountains: natural barrier along Dorne's northern edge.
+- The Dornish Marches: contested borderlands with Stormlands and Reach. The Broken Arm and Planky Town: southern coastal features/settlement relevant to Dornish geography.
+- The deserts and sand roads: travel routes depend on water, local guides, and seasonal heat.
+- The Stepstones are outside the mainland of Westeros and should not be a playable region under this project's scope.
+
+Dorne Political Position at Start
+---------------------------------
+Dorne is formally part of the realm but has strong regional identity and unresolved grievances. Elia Martell and her children were killed during the sack of King's Landing by Lannister forces; Gregor Clegane is associated with the murder. Doran's caution should not be mistaken for forgiveness. The Martells may be interested in a crisis that weakens the Lannisters, but their exact response remains a player-driven political decision.
+
+
+12. THE ROYAL FAMILY, CLAIMANTS, AND MAJOR CROSS-REGIONAL CHARACTERS
+===================================================================
+
+House Baratheon
+---------------
+- Robert I Baratheon: deceased king; former Lord of Storm's End; victor of Robert's Rebellion.
+- Stannis Baratheon: elder surviving brother; Lord of Dragonstone; senior brother in the succession.
+- Renly Baratheon: younger brother; politically popular and close to several courtiers.
+- Joffrey, Myrcella, and Tommen Baratheon: publicly Robert's children; biologically Jaime and Cersei's.
+- Shireen Baratheon: Stannis's daughter. Selyse Florent: Stannis's wife.
+- Robert's bastards: Gendry in King's Landing; Edric Storm, acknowledged and raised at Storm's End; Mya Stone in the Vale; Bella, associated with Stoney Sept. Other unacknowledged bastards exist; do not invent exact identities unless needed.
+
+House Targaryen and Exiles
+--------------------------
+- Viserys Targaryen: surviving son of Aerys II, claims the Iron Throne; outside Westeros at the start.
+- Daenerys Targaryen: Viserys's younger sister; outside Westeros at the start.
+- Rhaegar Targaryen: deceased crown prince, killed by Robert at the Trident. Elia Martell: Rhaegar's wife, deceased.
+- Rhaenys and Aegon Targaryen: Rhaegar and Elia's children, murdered during the sack of King's Landing.
+- Aerys II Targaryen: the Mad King, killed by Jaime Lannister during Robert's Rebellion.
+- Ser Arthur Dayne: Kingsguard knight, deceased. Ser Gerold Hightower and Ser Oswell Whent: Kingsguard knights who died at the Tower of Joy in the story's past.
+- Jon Connington: exiled former Hand and supporter of Rhaegar; not in Westeros at the start.
+- The game can include these people as off-map claimants or historical figures, but do not add foreign cities or events to the Westeros location map.
+
+House Stark and Allies
+----------------------
+- Eddard Stark, Catelyn Stark, Robb Stark, Sansa Stark, Arya Stark, Bran Stark, Rickon Stark, Jon Snow, Benjen Stark.
+- Luwin, Rodrik Cassel, Jory Cassel, Vayon Poole, Theon Greyjoy, Osha, Hodor, Old Nan, Septa Mordane, Jeyne Poole.
+- Howland Reed: Ned's close friend and a key keeper of past secrets; his current location is Greywater Watch.
+- Maege Mormont, Greatjon Umber, Rickard Karstark, Wyman Manderly, Roose Bolton, Barbrey Dustin, Galbart Glover, Robett Glover.
+- Important northern household figures should have realistic travel times and limited knowledge of King's Landing events.
+
+House Tully and Riverlands
+--------------------------
+- Hoster Tully, Edmure Tully, Brynden "Blackfish" Tully, Catelyn Stark, Lysa Arryn.
+- Walder Frey and key Frey heirs: Stevron Frey, Black Walder, Lame Lothar, Perwyn, Olyvar, Roslin, Walder Rivers, and other descendants.
+- Tytos Blackwood, the Bracken lord and heirs, Jason Mallister, Clement Piper, the Vance lords, the Mootons, the Darrys, Lady Shella Whent, Theomar Smallwood, and the Roote family.
+- The exact current heads of minor houses should be treated cautiously when not explicit in the source.
+
+House Lannister and Court
+-------------------------
+- Tywin, Cersei, Jaime, Tyrion, Kevan, Genna, Lancel.
+- Joffrey, Myrcella, Tommen.
+- Gregor Clegane, Sandor Clegane, Addam Marbrand, Ilyn Payne, Janos Slynt, Allar Deem.
+- Pycelle, Varys, Petyr Baelish, Barristan Selmy, the Kingsguard, and City Watch commanders.
+- Ser Dontos Hollard: a disgraced knight at court. Lollys Stokeworth and Falyse Stokeworth: Crownlands noblewomen relevant to court and marriage politics.
+- Taena Merryweather: a court figure later in the story; do not assume her later status at the opening.
+
+House Arryn and Vale
+--------------------
+- Jon Arryn (deceased), Lysa Arryn, Robert Arryn, Yohn Royce, Anya Waynwood, Lyn Corbray, Gerold Grafton, and other Vale lords.
+- Ser Hugh of the Vale: recently elevated from Jon Arryn's squire, with knowledge of the former Hand's household.
+
+House Tyrell and Reach
+----------------------
+- Mace Tyrell, Olenna Tyrell, Willas Tyrell, Garlan Tyrell, Loras Tyrell, Margaery Tyrell.
+- Paxter Redwyne, Randyll Tarly, Leyton Hightower, Alester Florent, and the lords of the Shield Islands.
+- The Reach's internal competition over prestige and marriage should be modeled.
+
+House Greyjoy and Ironborn
+--------------------------
+- Balon Greyjoy, Asha/Yara Greyjoy, Theon Greyjoy, Alannys Harlaw, Aeron Greyjoy, Euron Greyjoy, Victarion Greyjoy, Rodrik Harlaw, Dagmer Cleftjaw.
+- Euron and Victarion are peripheral to the opening political center; do not force them into the opening state unless the game deliberately advances the timeline.
+
+House Baratheon and Stormlands
+------------------------------
+- Robert (deceased), Stannis, Renly, Selyse, Shireen, Davos Seaworth, Beric Dondarrion, Balon Swann, Brienne of Tarth, Cortnay Penrose.
+- The Stormlands contain several rival marcher houses whose loyalties may be divided by personal history and the succession.
+
+House Martell and Dorne
+-----------------------
+- Doran Martell, Oberyn Martell, Ellaria Sand, Arianne, Quentyn, Trystane, Areo Hotah, the Sand Snakes.
+- Elia Martell is deceased but politically central to Dornish memory. Arthur Dayne is deceased but central to the story's past.
+
+Other Major Figures
+-------------------
+- Bronn: sellsword encountered in the Riverlands; not a landed lord at the opening.
+- Shae: a woman associated with Tyrion's later travels and court life; her exact starting position varies.
+- Thoros of Myr and Beric Dondarrion: connected to the Brotherhood Without Banners later; do not treat that organization as already formed at the opening.
+- Jaqen H'ghar: a prisoner in the royal party later in the story; not a major political actor at the initial snapshot.
+- Yoren: recruiter associated with the Night's Watch; outside the playable Wall system.
+- Samwell Tarly: Randyll Tarly's son, outside the main political arena at the opening and associated with the Night's Watch.
+- Melisandre: priestess associated with Stannis in later events; do not assume her later political role is active unless the game chooses to include her at Dragonstone.
+- Qyburn: a maester stripped of his chain, encountered later; not a central opening actor.
+- The High Septon: leader of the Faith of the Seven; individual identity and chronology vary.
+- The Faceless Men and the Iron Bank are based outside Westeros and are not Westerosi locations; they may be referenced only as external organizations if the game later permits off-map diplomacy.
+
+
+13. MAJOR INSTITUTIONS AND FACTION NETWORKS
+===========================================
+
+The Small Council
+-----------------
+A governing council that advises the monarch. Membership and offices can shift quickly.
+
+- Hand of the King: Eddard Stark at the opening.
+- Master of Coin: Petyr Baelish. Master of Whisperers: Varys. Grand Maester: Pycelle.
+- Master of Ships: the office and its occupant should be checked against the exact time slice; do not invent a certainty where the roster is in transition.
+- Lord Commander of the Kingsguard: Barristan Selmy.
+- The council is not a unified party. Members have private loyalties, information networks, debts, and fears.
+
+The Kingsguard
+--------------
+The white-cloaked royal bodyguard. At the opening, the active roster includes Barristan Selmy, Jaime Lannister, Meryn Trant, Boros Blount, Mandon Moore, Preston Greenfield, and Arys Oakheart. Kingsguard members swear to protect the monarch and royal family, but personal loyalties and orders can conflict.
+
+The City Watch
+--------------
+Also called the gold cloaks. It guards King's Landing and can decide the outcome of a palace crisis. Janos Slynt commands it at the opening. Its loyalty depends on command, money, fear, and the ability to control the city gates.
+
+The Faith of the Seven
+----------------------
+The dominant southern religion, with septs and septons across most of Westeros. The North retains stronger Old Gods traditions; the Iron Islands follow the Drowned God; Dorne has its own cultural blend. Religious institutions can provide legitimacy, public pressure, sanctuary, and political opposition.
+
+The Maesters
+------------
+Educated advisers trained at the Citadel in Oldtown. They serve noble houses, treat illness, advise rulers, and communicate by raven. A maester's loyalty is usually tied to service and institutional duty, but individual conduct varies. Ravens do not create instantaneous communication: distance, weather, and handling time matter.
+
+The Guilds and Urban Power
+--------------------------
+King's Landing contains merchants, ship captains, blacksmiths, alchemists/pyromancers, moneylenders, tavernkeepers, brothel owners, and the City Watch. Oldtown's Citadel and Hightower, Lannisport's merchants, Gulltown's port, White Harbor's trade, and the Arbor's fleet are all economic power centers.
+
+The Brotherhood Without Banners
+------------------------------
+A later organization associated with Beric Dondarrion and Thoros of Myr. It should not exist as an established faction at the opening unless the timeline is deliberately advanced.
+
+
+14. GEOGRAPHY, TRAVEL, AND ECONOMY RULES FOR PLAY
+=================================================
+
+- Westeros is vast. Do not let characters cross the continent in a few hours or receive news instantly.
+- King's Landing is on Blackwater Bay. The kingsroad runs north toward the Neck and south toward the Stormlands; the roseroad leads toward the Reach; the goldroad leads west.
+- The North's distances, snow, forests, and limited roads complicate movement.
+- The Vale is protected by mountain passes; its armies and supplies can be delayed by terrain.
+- The Riverlands' crossings and roads are military choke points. The Twins are especially valuable.
+- The Westerlands' mines and ports generate wealth; the Lannisters can finance forces, but wealth is not identical to instant manpower.
+- The Reach can feed large armies and field many knights; harvests, roads, and mustering time matter.
+- The Stormlands' coast, forests, and marcher castles shape local warfare.
+- Dorne's deserts, heat, mountain passes, and water supply constrain campaigns.
+- The Iron Islands depend on ships, crews, harbors, and weather; they cannot teleport fleets to every coast.
+- Oldtown, King's Landing, Lannisport, Gulltown, and White Harbor are among the largest cities/ports in Westeros. Maidenpool, Duskendale, and other towns are smaller but politically important.
+- Use raven messages, couriers, ships, and rumor networks with travel delays.
+- House levies are not standing professional armies in the modern sense. Mobilization requires time, food, horses, equipment, command, and political agreement.
+- A castle is not a city; a town is not necessarily a fortified seat; a seat may be a ruin or an isolated stronghold.
+- Control of a location means more than possession of its name: garrison, food, roads, local lord, nearby villages, and public loyalty all matter.
+- Money can buy loyalty but cannot guarantee it. Hostages, marriage contracts, oaths, religious legitimacy, debts, and reputation also matter.
+- Noble houses can have competing branches, inheritance disputes, bastards, widows, regents, and underage heirs. Track those relationships explicitly.
+
+
+15. INITIAL CHARACTER KNOWLEDGE MATRIX
+======================================
+
+Known Publicly or Widely
+------------------------
+- Robert Baratheon is dead.
+- Joffrey is the publicly acknowledged heir.
+- Eddard Stark is Hand.
+- Jon Arryn is dead.
+- Stannis is at Dragonstone.
+- The Baratheon brothers have different bases and networks.
+- The Lannisters are closely connected to the royal family.
+- Theon Greyjoy was raised at Winterfell after Balon's defeat.
+- Dorne remembers the deaths of Elia Martell and her children.
+- The Targaryens were overthrown and Viserys/Daenerys survive in exile, though not all smallfolk know details.
+
+Known Only to a Limited Circle
+------------------------------
+- Cersei and Jaime's incest and the children's true parentage.
+- The conclusions of Jon Arryn's investigation.
+- Ned's exact suspicions and evidence.
+- Varys's informant network and deeper objectives.
+- Littlefinger's private plans and his manipulation of personal relationships.
+- Stannis's private conclusion about the succession, unless he has already communicated it.
+- The true details surrounding Lyanna Stark's death and the Tower of Joy.
+- The real story behind Jon Snow's birth.
+- The private intentions of each great house and whether they would support a rival claimant.
+
+Game Master rule - maintain a per-character knowledge ledger:
+FACT | WHO KNOWS | HOW THEY LEARNED IT | WHEN THEY LEARNED IT | WHO ELSE THEY TOLD
+Do not allow omniscient narration to leak secrets into dialogue or character decisions.
+
+
+16. OPENING FACTIONS AND THEIR LEVERS
+=====================================
+
+The Royal Court / Lannister Network
+-----------------------------------
+Levers: royal household, queen and presumed heirs, Kingsguard access, court appointments, gold, patronage, Casterly Rock's resources, Lannister bannermen, access to the king's person.
+Weaknesses: disputed legitimacy if exposed, resentment from Dorne, dependence on court allies, rival Baratheon claimants, risk of losing control of the City Watch.
+
+The Stark / Tully Network
+-------------------------
+Levers: Ned's legal authority as Hand, Stark reputation, northern manpower, Tully family links, Catelyn's political relationships, Robb's control of Winterfell.
+Weaknesses: Ned is far from his home base, the North is distant, the family is exposed through Sansa's betrothal and Theon's hostage status, and the Riverlands are divided among many lords.
+
+The Stannis Network
+-------------------
+Levers: seniority among Robert's surviving brothers, Dragonstone's fortress and fleet, military discipline, legal argument if the royal children are illegitimate.
+Weaknesses: stern reputation, limited court popularity, uncertain support from Stormlands and Crownlands, and need to prove the claim before the realm.
+
+The Renly Network
+-----------------
+Levers: charisma, court connections, support among some Stormlords and Reach-linked figures, social popularity.
+Weaknesses: younger birth order than Stannis, no automatic claim superior to his elder brother, dependence on alliances and public acceptance.
+
+The Vale
+--------
+Levers: defensible geography, significant knights and lords, control of eastern mountain passes.
+Weaknesses: Lysa's caution, young Lord Robert, isolation, and no unified commitment to the capital crisis.
+
+The Tyrell / Reach Network
+--------------------------
+Levers: food supply, large population, knights, wealthy bannermen, Oldtown, Redwyne fleet, marriage alliances.
+Weaknesses: internal competition among houses, need to secure a high-status royal connection, and uncertain stance toward the Baratheon claimants.
+
+The Greyjoy Network
+-------------------
+Levers: longships, coastal raids, island geography, ironborn naval culture.
+Weaknesses: defeat in the recent rebellion, Theon held at Winterfell, limited trust from mainland houses, and internal disagreement over future policy.
+
+The Martell Network
+-------------------
+Levers: regional cohesion, defensive terrain, unresolved grievances, potential to undermine Lannister legitimacy.
+Weaknesses: distance from the capital, cautious leadership, and a history of failed or costly wars against the Crown.
+
+The Free / Minor Lords
+----------------------
+Most houses are not automatically loyal because of a map label. They weigh marriage, inheritance, rivalries, debts, fear, regional identity, and expected winners. Their allegiance can change after negotiation, hostage-taking, military pressure, or credible promises.
+
+
+17. CONTINUITY NOTES
+====================
+
+- This world bible describes a single consistent continuity. Where named characters, family relationships, or office-holders vary across tellings, the game should pick one version and stay with it.
+- Some characters and minor houses have incomplete or disputed genealogies. Mark such details unknown rather than fabricating a definitive family tree.
+- The opening is a game-specific freeze-frame immediately after Robert's death, before Ned openly challenges the Lannister succession. Use this snapshot as the authoritative game state even where scene-level chronology in any particular telling differs.
+- No later outcomes have occurred at the starting point. The arrest or execution of Ned Stark, Robb's crown, Renly's campaign, Stannis's campaign, open war among the claimants, the Red Wedding, Joffrey's death, Tywin's death, and all subsequent regime changes are future possibilities only, not established history.
+- The realm's fate must emerge from player decisions, not from a predetermined script.
+
+
+18. QUICK LOCATION INDEX
+========================
+
+NORTH:
+Winterfell; White Harbor; Dreadfort; Karhold; Last Hearth; Deepwood Motte; Bear Island; Greywater Watch; Castle Cerwyn; Torrhen's Square; Barrowton; Hornwood; Oldcastle; Moat Cailin; the Neck; Wolfswood; Stony Shore; Flint's Finger; Sea Dragon Point; Skagos.
+
+VALE:
+Eyrie; Gates of the Moon; Gulltown; Runestone; Ironoaks; Heart's Home; Strongsong; Longbow Hall; Redfort; Ninestars; Wickenden; Old Anchor; Grey Glen; Snakewood; the Fingers; the Three Sisters; Bloody Gate; Mountains of the Moon.
+
+RIVERLANDS:
+Riverrun; the Twins; Harrenhal; Seagard; Raventree Hall; Stone Hedge; Maidenpool; Darry; Pinkmaiden; Wayfarer's Rest; Atranta; Acorn Hall; Lord Harroway's Town; Willow Wood; Saltpans; Fairmarket; Stoney Sept; Inn at the Crossroads; Quiet Isle; Gods Eye; Isle of Faces; Trident; Red Fork; Blue Fork; Green Fork; Tumblestone.
+
+IRON ISLANDS:
+Pyke; Lordsport; Ten Towers; Harlaw; Old Wyk; Hammerhorn; Great Wyk; Orkmont; Blacktyde; Saltcliffe; Iron Holt; Lonely Light.
+
+WESTERLANDS:
+Casterly Rock; Lannisport; Golden Tooth; Ashemark; Crakehall; Hornvale; Faircastle; Crag; Silverhill; Cornfield; Deep Den; Feastfires; Banefort; Sarsfield; Tarbeck Hall ruins; Castamere ruins.
+
+REACH:
+Highgarden; Oldtown; Hightower; Citadel; Starry Sept; Arbor; Horn Hill; Brightwater Keep; Goldengrove; Cider Hall; New Barrel; Old Oak; Red Lake; Longtable; Honeyholt; Ashford; Bitterbridge; Starpike; Coldmoat; Shield Islands; Tumbleton; Mander; Honeywine.
+
+STORMLANDS:
+Storm's End; Dragonstone; Greenstone; Evenfall Hall; Stonehelm; Harvest Hall; Blackhaven; Nightsong; Parchments; Griffin's Roost; Rain House; Felwood; Crow's Nest; Grandview; Bronzegate; Haystack Hall; Broad Arch; Fawnton; Amberly; Rainwood; Shipbreaker Bay; Cape Wrath; Dornish Marches; Wendwater.
+
+CROWNLANDS:
+King's Landing; Red Keep; Great Sept of Baelor; Tower of the Hand; Maegor's Holdfast; Dragonpit; Flea Bottom; city gates; harbor; Dragonstone; Driftmark; Claw Isle; Duskendale; Rosby; Stokeworth; Antlers; Rook's Rest; Stonedance; Sharp Point; Sweetport Sound; Dyre Den; Brownhollow; Whispers; Crackclaw Point; Massey's Hook; Kingswood; Blackwater Rush; Blackwater Bay; Wendwater.
+
+DORNE:
+Sunspear; Shadow City; Water Gardens; Starfall; Yronwood; Skyreach; Kingsgrave; Godsgrace; Blackmont; Sandstone; Hellholt; Wyl; Lemonwood; Salt Shore; Spottswood; Ghost Hill; the Tor; Vaith; Greenblood; Torrentine; Boneway; Prince's Pass; Red Mountains; Dornish Marches; Planky Town.
+
+
+19. REFERENCE POLICY
+====================
+
+This document is a synthesized game reference for a personal, non-commercial roleplaying project. It is not an official publication and should not be treated as a substitute for any published work.
+
+Westeros contains hundreds of named houses, castles, villages, rivers, islands, and historical people. This reference covers the major political map, major seats, important bannermen, and prominent characters needed for a playable opening campaign. It is intentionally not an assertion that every minor name in any source has been included.
+
+For reliable gameplay, maintain a separate structured database with fields for region, location type, ruling house, liege, current holder, known residents, status at the opening, continuity variant, and confidence level. If a detail is uncertain, mark it unknown or ask for a check rather than inventing a definitive answer.
+
+- END OF REFERENCE -
