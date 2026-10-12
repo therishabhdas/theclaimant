@@ -1,4 +1,8 @@
+import { Suspense } from "react";
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { signOut } from "../auth/actions";
+import { createClient } from "../../lib/supabase/server";
 
 function SealMark() {
   return (
@@ -10,7 +14,35 @@ function SealMark() {
   );
 }
 
-export function SiteHeader({ current }: { current: "home" | "about" }) {
+async function AuthNavigation() {
+  const supabase = createClient(await cookies());
+  const { data: { user }, error } = await supabase.auth.getUser();
+
+  if (error && error.name !== "AuthSessionMissingError") {
+    throw new Error(`Unable to verify the current account: ${error.message}`);
+  }
+
+  if (!user) {
+    return (
+      <Link className="auth-nav-link" href="/auth">
+        Sign in <span aria-hidden="true">↗</span>
+      </Link>
+    );
+  }
+
+  return (
+    <div className="auth-navigation">
+      <Link className="auth-nav-link" href="/account">
+        {user.email}
+      </Link>
+      <form action={signOut}>
+        <button className="auth-nav-signout" type="submit">Sign out</button>
+      </form>
+    </div>
+  );
+}
+
+export function SiteHeader({ current }: { current: "home" | "about" | "account" }) {
   return (
     <>
       <div className="topline">
@@ -34,10 +66,21 @@ export function SiteHeader({ current }: { current: "home" | "about" }) {
             About the game
           </Link>
         </nav>
-        <Link className="header-link" href={current === "about" ? "/#opening" : "/about"}>
-          {current === "about" ? "Return to the opening" : "Understand the realm"}
-          <span aria-hidden="true">↗</span>
-        </Link>
+        <div className="header-actions">
+          <Link className="header-link" href={current === "about" ? "/#opening" : "/about"}>
+            {current === "about" ? "Return to the opening" : "Understand the realm"}
+            <span aria-hidden="true">↗</span>
+          </Link>
+          <Suspense
+            fallback={
+              <Link className="auth-nav-link" href="/auth">
+                Sign in
+              </Link>
+            }
+          >
+            <AuthNavigation />
+          </Suspense>
+        </div>
       </header>
     </>
   );

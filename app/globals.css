@@ -78,6 +78,12 @@ a:focus-visible {
 .wordmark-name { font-family: var(--serif); font-size: 15px; letter-spacing: .14em; }
 .wordmark-note { color: var(--ink-soft); font-size: 7px; font-weight: 600; letter-spacing: .17em; }
 .main-nav { height: 100%; gap: 34px; }
+.header-actions, .auth-navigation { display: flex; align-items: center; gap: 14px; }
+.auth-navigation form { margin: 0; }
+.auth-nav-link, .auth-nav-signout { color: var(--red); font-size: 10px; white-space: nowrap; }
+.auth-nav-link { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+.auth-nav-signout { padding: 0; border: 0; background: none; cursor: pointer; font-family: inherit; }
+.auth-nav-signout:hover { color: var(--red-deep); }
 
 .main-nav a, .header-link {
   color: #655e53;
@@ -302,6 +308,23 @@ a:focus-visible {
 .about-final h2 { margin: 0 auto 24px; font-family: var(--serif); font-size: clamp(39px, 5.5vw, 62px); font-weight: 400; letter-spacing: -.05em; line-height: 1.08; }
 .about-final .button-outline { min-height: 43px; }
 
+.auth-page { min-height: 62vh; display: grid; place-items: center; padding: 55px 22px; }
+.auth-card { width: min(100%, 460px); padding: 37px; border: 1px solid var(--line); background: var(--paper-light); box-shadow: 10px 12px 0 rgb(71 57 37 / 6%); }
+.auth-card h1 { margin: 18px 0 11px; font-family: var(--serif); font-size: clamp(38px, 6vw, 55px); font-weight: 400; letter-spacing: -.055em; line-height: 1.05; }
+.auth-intro { margin: 0 0 25px; color: var(--ink-soft); font-family: var(--serif); font-size: 14px; line-height: 1.7; }
+.auth-form { display: grid; gap: 9px; }
+.auth-form label { margin-top: 9px; color: var(--ink); font-size: 10px; font-weight: 700; letter-spacing: .08em; }
+.auth-form input { width: 100%; min-height: 43px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 0; background: #fffdf7; color: var(--ink); font: inherit; }
+.auth-form input:focus { outline: 2px solid var(--red); outline-offset: 2px; }
+.auth-submit { width: 100%; margin-top: 12px; cursor: pointer; }
+.auth-submit:disabled { cursor: wait; opacity: .72; }
+.auth-message { margin: 8px 0 0; color: #385a3b; font-size: 12px; line-height: 1.6; }
+.auth-message-error { color: var(--red-deep); }
+.auth-switch { margin: 21px 0 0; color: var(--ink-soft); font-size: 11px; }
+.auth-switch button { padding: 0; border: 0; background: none; color: var(--red); cursor: pointer; font: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.auth-back { display: inline-block; margin-top: 21px; color: var(--ink-soft); font-size: 10px; }
+.auth-back:hover { color: var(--red); }
+
 @media (min-width: 1500px) { .hero { min-height: 710px; } }
 
 @media (max-width: 900px) {
@@ -321,7 +344,11 @@ a:focus-visible {
   .wordmark-name { font-size: 13px; }
   .wordmark-note { font-size: 6px; }
   .main-nav { display: none; }
+  .header-actions { gap: 10px; }
   .header-link { gap: 6px; padding-left: 10px; font-size: 9px; }
+  .auth-navigation { gap: 8px; }
+  .auth-nav-link, .auth-nav-signout { font-size: 9px; }
+  .auth-nav-link { max-width: 86px; }
   .hero { width: calc(100% - 44px); min-height: auto; grid-template-columns: 1fr; gap: 40px; padding: 52px 0 53px; }
   .hero h1 { margin-top: 19px; font-size: clamp(49px, 12.2vw, 72px); }
   .hero-deck { max-width: 450px; font-size: 13px; }
@@ -383,6 +410,8 @@ a:focus-visible {
   .player-copy { padding-top: 4px; }
   .player-copy p { font-size: 11px; }
   .about-final { padding: 43px 20px 48px; }
+  .auth-page { min-height: 65vh; padding: 39px 22px; }
+  .auth-card { padding: 26px 21px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

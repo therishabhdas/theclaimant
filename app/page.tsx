@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
+import { cookies } from "next/headers";
 import { SiteFooter, SiteHeader } from "./components/site-chrome";
+import { createClient } from "../lib/supabase/server";
 
 export const metadata: Metadata = {
   title: "The Claimant — The Crown Is Unsettled",
@@ -37,6 +40,53 @@ const pressures = [
     text: "Ravens, couriers, ships, and rumor carry news at human speed. A secret is not common knowledge simply because it is true—and distance gives every decision a cost.",
   },
 ];
+
+async function TodosSection() {
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+  const { data: todos, error: todosError } = await supabase
+    .from("todos")
+    .select("id, name")
+    .order("id", { ascending: true });
+
+  if (todosError) {
+    console.error("Unable to load todos from Supabase:", todosError);
+  }
+
+  return (
+    <section className="opening-section" aria-labelledby="todos-heading">
+      <div className="section-index">
+        <span>03</span>
+        <span className="index-rule" />
+        THE REALM&apos;S RECORDS
+      </div>
+      <div className="opening-heading">
+        <h2 id="todos-heading">A ledger of<br /><em>open matters.</em></h2>
+        <p>Records currently stored in the Supabase todos table.</p>
+      </div>
+      {todosError ? (
+        <p role="alert">
+          The records could not be loaded. Check that the Supabase todos
+          table exists and allows public reads.
+        </p>
+      ) : todos?.length ? (
+        <div className="pressure-grid">
+          {todos.map((todo) => (
+            <article className="pressure-card" key={todo.id}>
+              <div className="pressure-meta">
+                <span>{todo.id}</span>
+                <span>OPEN MATTER</span>
+              </div>
+              <h3>{todo.name}</h3>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p>No records have been added yet.</p>
+      )}
+    </section>
+  );
+}
 
 export default function Home() {
   return (
@@ -187,6 +237,24 @@ export default function Home() {
           ))}
         </div>
       </section>
+
+      <Suspense
+        fallback={
+          <section className="opening-section" aria-busy="true">
+            <div className="section-index">
+              <span>03</span>
+              <span className="index-rule" />
+              THE REALM&apos;S RECORDS
+            </div>
+            <div className="opening-heading">
+              <h2>A ledger of<br /><em>open matters.</em></h2>
+              <p>Loading records from Supabase…</p>
+            </div>
+          </section>
+        }
+      >
+        <TodosSection />
+      </Suspense>
 
       <section className="closing-cta">
         <p className="eyebrow"><span />BEFORE ANYONE TAKES THE THRONE</p>
