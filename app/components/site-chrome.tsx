@@ -42,7 +42,11 @@ async function AuthNavigation() {
   );
 }
 
-export function SiteHeader({ current }: { current: "home" | "about" | "account" }) {
+export function SiteHeader({
+  current,
+}: {
+  current: "home" | "about" | "locations" | "characters" | "account";
+}) {
   return (
     <>
       <div className="topline">
@@ -64,6 +68,12 @@ export function SiteHeader({ current }: { current: "home" | "about" | "account" 
           </Link>
           <Link aria-current={current === "about" ? "page" : undefined} href="/about">
             About the game
+          </Link>
+          <Link aria-current={current === "locations" ? "page" : undefined} href="/locations">
+            Locations
+          </Link>
+          <Link aria-current={current === "characters" ? "page" : undefined} href="/characters">
+            Characters
           </Link>
         </nav>
         <div className="header-actions">
