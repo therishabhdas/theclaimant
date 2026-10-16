@@ -42,15 +42,37 @@ The Groq SDK is installed and the server-only client is available in
 `lib/groq.ts`. To configure it locally:
 
 1. Create an API key in the [Groq Console](https://console.groq.com/keys).
-2. Copy `.env.example` to `.env.local`.
-3. Replace `your_groq_api_key_here` with your Groq API key. Keep `.env.local`
+2. Copy `.env.example` to `.env.local` and replace
+   `your_groq_api_key` with your Groq API key. Keep `.env.local`
    private; it is ignored by Git.
-4. Restart the development server after adding the key.
+3. Restart the development server after adding the key.
 
 `createGroqClient()` creates an SDK client using that key, and `GROQ_MODEL` is
 set to `openai/gpt-oss-120b`. Creating the client does not send a request to
 Groq; no model calls are made by the site yet. The API key must only be used in
 server-side code, never in a Client Component or a `NEXT_PUBLIC_` variable.
+
+### World event log
+
+The starting reference is the opening canon; the event log records what changes
+after it. Run [`supabase/event-log.sql`](./supabase/event-log.sql) once in the
+Supabase SQL Editor to create the shared campaign timeline. Event entries keep
+the full canonical event separate from its public summary and facts known by
+individual characters, alongside affected characters, location, and
+structured state changes.
+
+Copy `.env.example` to `.env.local` and set `SUPABASE_SERVICE_ROLE_KEY` from
+your Supabase project's API settings. This key grants privileged database
+access: keep it secret and use it only in server-side code. The server-only
+helpers in [`lib/game-events.ts`](./lib/game-events.ts) provide
+`appendGameEvent()`, `getGameEvents()`, and `loadWorldContext()`.
+`loadWorldContext()` combines the starting reference with events in
+chronological order, ready to be used as server-side model context. The
+omniscient reference and canonical event details must not be sent directly to
+players. No page or gameplay action writes events or calls Groq yet. Each
+event's `characterKnowledge` is an object keyed by character ID; its values
+describe only what that character knows. `stateChanges` is a list of structured
+facts changed by the event.
 
 Start the local development server:
 
