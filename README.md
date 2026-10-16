@@ -36,6 +36,22 @@ Install the project dependencies:
 npm install
 ```
 
+### Connect Groq
+
+The Groq SDK is installed and the server-only client is available in
+`lib/groq.ts`. To configure it locally:
+
+1. Create an API key in the [Groq Console](https://console.groq.com/keys).
+2. Copy `.env.example` to `.env.local`.
+3. Replace `your_groq_api_key_here` with your Groq API key. Keep `.env.local`
+   private; it is ignored by Git.
+4. Restart the development server after adding the key.
+
+`createGroqClient()` creates an SDK client using that key, and `GROQ_MODEL` is
+set to `openai/gpt-oss-120b`. Creating the client does not send a request to
+Groq; no model calls are made by the site yet. The API key must only be used in
+server-side code, never in a Client Component or a `NEXT_PUBLIC_` variable.
+
 Start the local development server:
 
 ```bash
