@@ -23,8 +23,14 @@ create table if not exists public.world_regions (
   world_state_id smallint not null default 1
     references public.world_state(id) on delete restrict,
   name text not null unique,
+  current_situation text not null default
+    'The succession is disputed but no realm-wide war has begun.',
   created_at timestamptz not null default now()
 );
+
+alter table public.world_regions
+  add column if not exists current_situation text not null default
+    'The succession is disputed but no realm-wide war has begun.';
 
 insert into public.world_regions (name)
 values

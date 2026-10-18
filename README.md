@@ -63,6 +63,16 @@ second script is an additive, rerunnable migration. It expects the existing
 `playable_characters`, `playable_locations`, and `user_character_assignments`
 tables used by the site.
 
+Then run [`supabase/opening-state-seed.sql`](./supabase/opening-state-seed.sql)
+to populate the opening snapshot from the starting reference. It seeds the nine
+regions, the Great Houses and named major houses, opening regional summaries,
+known historical wars, explicitly established betrothals and hostage status,
+the opening event, and the royal-parentage secret with only the specified
+characters marked as knowing or suspecting it. Existing character/location
+catalog rows are linked when present. It does not fabricate playable character
+or location catalog rows, a calendar date, season, resource totals, army sizes,
+or private character ambitions.
+
 The migration relates existing roster characters and locations to houses and
 regions, and adds connected records for house lands, lieges, claims, character
 traits, ambitions, loyalties and secrets, wars and participants, diplomacy,
