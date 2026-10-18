@@ -52,27 +52,49 @@ set to `openai/gpt-oss-120b`. Creating the client does not send a request to
 Groq; no model calls are made by the site yet. The API key must only be used in
 server-side code, never in a Client Component or a `NEXT_PUBLIC_` variable.
 
-### World event log
+### World state and event log
 
-The starting reference is the opening canon; the event log records what changes
-after it. Run [`supabase/event-log.sql`](./supabase/event-log.sql) once in the
-Supabase SQL Editor to create the shared campaign timeline. Event entries keep
-the full canonical event separate from its public summary and facts known by
-individual characters, alongside affected characters, location, and
-structured state changes.
+The starting reference is the opening canon; the database holds the current
+world state and the event log records what changes. In the Supabase SQL Editor,
+run [`supabase/event-log.sql`](./supabase/event-log.sql) if the `game_events`
+table has not already been created, then run
+[`supabase/world-state-schema.sql`](./supabase/world-state-schema.sql). The
+second script is an additive, rerunnable migration. It expects the existing
+`playable_characters`, `playable_locations`, and `user_character_assignments`
+tables used by the site.
 
-Copy `.env.example` to `.env.local` and set `SUPABASE_SERVICE_ROLE_KEY` from
-your Supabase project's API settings. This key grants privileged database
-access: keep it secret and use it only in server-side code. The server-only
-helpers in [`lib/game-events.ts`](./lib/game-events.ts) provide
-`appendGameEvent()`, `getGameEvents()`, and `loadWorldContext()`.
-`loadWorldContext()` combines the starting reference with events in
-chronological order, ready to be used as server-side model context. The
-omniscient reference and canonical event details must not be sent directly to
-players. No page or gameplay action writes events or calls Groq yet. Each
-event's `characterKnowledge` is an object keyed by character ID; its values
-describe only what that character knows. `stateChanges` is a list of structured
-facts changed by the event.
+The migration relates existing roster characters and locations to houses and
+regions, and adds connected records for house lands, lieges, claims, character
+traits, ambitions, loyalties and secrets, wars and participants, diplomacy,
+and event participants and state changes. The existing character assignment
+remains the player's current-character link; it gains linked current location,
+resources, and personality fields. Existing character claim and location
+control data is linked where it can be matched. Unspecified facts such as
+treasury, army size, season, loyalties, or secret knowledge are left unknown
+instead of being invented.
+
+Copy `.env.example` to `.env.local` if needed and set
+`SUPABASE_SERVICE_ROLE_KEY` from your Supabase project's API settings. This key
+grants privileged database access: keep it secret and use it only in
+server-side code. The server-only helpers in
+[`lib/game-events.ts`](./lib/game-events.ts) provide `appendGameEvent()`,
+`getGameEvents()`, and `loadWorldContext()`. New events automatically create
+foreign-keyed participant, location, knowledge, and structured state-change
+records; state-change targets must identify a character, house, location, war,
+or diplomacy record.
+
+`loadWorldContext()` combines the starting reference, chronological history,
+and connected current database records. It returns canonical and secret
+information for trusted server-side use only; do not expose it directly to
+players. Passing a user ID includes that player's assignment, resources,
+location, and personality, but does not filter the wider canonical context.
+The account page displays the signed-in character's profile, recorded traits,
+ambitions, loyalties, claims, and only that character's known or suspected
+secrets. Its realm overview uses public events and diplomacy records marked
+`is_public`; keep private political information out of those public summaries.
+If the world-state migration was already run, rerun its latest version to add
+the public visibility fields used by the account overview. No page or gameplay
+action writes events or calls Groq yet.
 
 Start the local development server:
 
