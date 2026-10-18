@@ -5,7 +5,7 @@ import { createClient } from "../../lib/supabase/server";
 import {
   getAssignedCharacter,
   type AssignedCharacter,
-} from "../../lib/character-assignment";
+} from "../../lib/game/character-assignment";
 
 type DrawResult =
   | { success: true; character: AssignedCharacter }

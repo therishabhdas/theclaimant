@@ -39,7 +39,7 @@ npm install
 ### Connect Groq
 
 The Groq SDK is installed and the server-only client is available in
-`lib/groq.ts`. To configure it locally:
+[`lib/ai/groq.ts`](./lib/ai/groq.ts). To configure it locally:
 
 1. Create an API key in the [Groq Console](https://console.groq.com/keys).
 2. Copy `.env.example` to `.env.local` and replace
@@ -86,12 +86,19 @@ instead of being invented.
 Copy `.env.example` to `.env.local` if needed and set
 `SUPABASE_SERVICE_ROLE_KEY` from your Supabase project's API settings. This key
 grants privileged database access: keep it secret and use it only in
-server-side code. The server-only helpers in
-[`lib/game-events.ts`](./lib/game-events.ts) provide `appendGameEvent()`,
-`getGameEvents()`, and `loadWorldContext()`. New events automatically create
-foreign-keyed participant, location, knowledge, and structured state-change
-records; state-change targets must identify a character, house, location, war,
-or diplomacy record.
+server-side code. [`lib/game/events.ts`](./lib/game/events.ts) provides
+`appendGameEvent()`, `getGameEvents()`, `loadWorldContext()`, and
+`loadGroqGamePrompt(userId, playerRequest)`. The prompt helper reads the
+starting reference, event history, and connected
+Supabase state, then returns the system and user prompt messages using
+[`lib/ai/prompt-template.ts`](./lib/ai/prompt-template.ts). It includes the
+authenticated player's assigned character and marks roster characters with no
+user assignment as AI-controlled. Call it only from trusted server-side code
+and pass the authenticated user's ID. This prepares prompt content only; it
+does not create a Groq client or send a model request. New events automatically
+create foreign-keyed participant, location, knowledge, and structured
+state-change records; state-change targets must identify a character, house,
+location, war, or diplomacy record.
 
 `loadWorldContext()` combines the starting reference, chronological history,
 and connected current database records. It returns canonical and secret
@@ -135,6 +142,11 @@ app/
   globals.css            Global styles and responsive layouts
   layout.tsx             Root layout and site-wide metadata
   page.tsx               Home page
+lib/
+  ai/                    Groq client and prompt formatting
+  game/                  Campaign state and character helpers
+  supabase/              Supabase browser, server, and middleware clients
+supabase/                SQL schema, event-log, and opening-state scripts
 public/                   Static assets
 theclaimant_starting_reference.txt
                           World-state reference for the opening setting
@@ -142,7 +154,9 @@ theclaimant_starting_reference.txt
 
 The primary content for each route lives in its `page.tsx` file. Shared
 navigation and footer components are in `app/components/site-chrome.tsx`, and
-the visual system is defined in `app/globals.css`.
+the visual system is defined in `app/globals.css`. Runtime code is grouped in
+`lib/` by responsibility; database SQL stays in the root `supabase/` folder
+instead of being mixed into runtime source code.
 
 ## Technology
 

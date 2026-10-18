@@ -3,8 +3,8 @@
 import type { CSSProperties } from "react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { CharacterAccountDetails } from "../../lib/account-world";
-import type { AssignedCharacter } from "../../lib/character-assignment";
+import type { CharacterAccountDetails } from "../../lib/game/account-world";
+import type { AssignedCharacter } from "../../lib/game/character-assignment";
 import { drawPlayableCharacter } from "./character-actions";
 
 function formatRecord(value: unknown) {

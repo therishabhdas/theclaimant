@@ -1,4 +1,4 @@
-import type { createClient } from "./supabase/server";
+import type { createClient } from "../supabase/server";
 
 type ServerSupabaseClient = ReturnType<typeof createClient>;
 

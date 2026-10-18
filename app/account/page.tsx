@@ -8,13 +8,13 @@ import CharacterDraw from "./character-draw";
 import {
   getAssignedCharacter,
   type AssignedCharacter,
-} from "../../lib/character-assignment";
+} from "../../lib/game/character-assignment";
 import {
   getCharacterAccountDetails,
   getRealmOverview,
   type CharacterAccountDetails,
   type RealmOverview,
-} from "../../lib/account-world";
+} from "../../lib/game/account-world";
 import { createClient } from "../../lib/supabase/server";
 
 export const metadata: Metadata = {
