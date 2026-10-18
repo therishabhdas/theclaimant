@@ -22,6 +22,21 @@ export const metadata: Metadata = {
   description: "Draw and keep your character in The Claimant.",
 };
 
+function formatMilitaryEstimate(estimate: RealmOverview["regions"][number]["militaryEstimates"][number]) {
+  if (estimate.minimumStrength === null || estimate.maximumStrength === null) {
+    return "Strength unknown";
+  }
+
+  const range = estimate.minimumStrength === estimate.maximumStrength
+    ? estimate.minimumStrength.toLocaleString()
+    : `${estimate.minimumStrength.toLocaleString()}–${estimate.maximumStrength.toLocaleString()}`;
+  return `${range} ${estimate.strengthUnit}`;
+}
+
+function formatTreasury(amount: number | null) {
+  return amount === null ? "not recorded" : `${amount.toLocaleString()} gold dragons`;
+}
+
 async function AccountDetails() {
   const supabase = createClient(await cookies());
   const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -149,9 +164,33 @@ function RealmOverviewSection({
                   </div>
                   <h3>{region.name}</h3>
                   {relevantHouses.length > 0 && (
-                    <p className="account-region-houses">
-                      {relevantHouses.map((house) => house.name).join(" · ")}
-                    </p>
+                    <ul>
+                      {relevantHouses.map((house) => (
+                        <li key={house.id}>
+                          <span>{house.name}</span>
+                          <small>
+                            {house.treasuryIsEstimate ? "Estimated treasury: " : "Treasury: "}
+                            {formatTreasury(house.treasuryAmount)}
+                            {house.treasurySourceNote ? ` · ${house.treasurySourceNote}` : ""}
+                            {house.debtSummary ? ` · ${house.debtSummary}` : ""}
+                          </small>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {region.militaryEstimates.length > 0 && (
+                    <div className="account-region-events">
+                      <span>FORCE ESTIMATES</span>
+                      {region.militaryEstimates.map((estimate) => (
+                        <p key={estimate.id}>
+                          <strong>{estimate.forceName}: {formatMilitaryEstimate(estimate)}</strong>
+                          {` · ${estimate.readinessStatus.replaceAll("_", " ")}`}
+                          {` · ${estimate.confidenceLevel.replaceAll("_", " ")} confidence`}
+                          {estimate.isGameplayAssumption ? " · gameplay estimate" : ""}
+                          {estimate.summary && ` — ${estimate.summary}`}
+                        </p>
+                      ))}
+                    </div>
                   )}
                   {region.locations.length > 0 ? (
                     <ul>

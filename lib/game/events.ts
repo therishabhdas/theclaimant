@@ -255,6 +255,9 @@ export async function loadWorldContext(playerUserId?: string): Promise<string> {
     claims,
     wars,
     warParticipants,
+    regionalMilitaryEstimates,
+    militaryMusterRules,
+    worldFinancialRecords,
     diplomacy,
     eventCharacters,
     eventHouses,
@@ -291,6 +294,18 @@ export async function loadWorldContext(playerUserId?: string): Promise<string> {
     readRows(supabase.from("world_wars").select("*"), "wars"),
     readRows(supabase.from("war_participants").select("*"), "war participants"),
     readRows(
+      supabase.from("regional_military_estimates").select("*"),
+      "regional military estimates",
+    ),
+    readRows(
+      supabase.from("military_muster_rules").select("*"),
+      "military muster rules",
+    ),
+    readRows(
+      supabase.from("world_financial_records").select("*"),
+      "world financial records",
+    ),
+    readRows(
       supabase.from("diplomacy_records").select("*"),
       "diplomacy records",
     ),
@@ -319,6 +334,9 @@ export async function loadWorldContext(playerUserId?: string): Promise<string> {
     claims,
     wars,
     warParticipants,
+    regionalMilitaryEstimates,
+    militaryMusterRules,
+    worldFinancialRecords,
     diplomacy,
     eventCharacters,
     eventHouses,
@@ -369,6 +387,9 @@ export async function loadGroqGamePrompt(
     claims,
     wars,
     warParticipants,
+    regionalMilitaryEstimates,
+    militaryMusterRules,
+    worldFinancialRecords,
     diplomacy,
   ] = await Promise.all([
     readFile(join(process.cwd(), "theclaimant_starting_reference.txt"), "utf8"),
@@ -410,6 +431,18 @@ export async function loadGroqGamePrompt(
     readRows(
       supabase.from("war_participants").select("*"),
       "war participants",
+    ),
+    readRows(
+      supabase.from("regional_military_estimates").select("*"),
+      "regional military estimates",
+    ),
+    readRows(
+      supabase.from("military_muster_rules").select("*"),
+      "military muster rules",
+    ),
+    readRows(
+      supabase.from("world_financial_records").select("*"),
+      "world financial records",
     ),
     readRows(
       supabase.from("diplomacy_records").select("*"),
@@ -562,6 +595,9 @@ export async function loadGroqGamePrompt(
       houses,
       wars,
       warParticipants,
+      regionalMilitaryEstimates,
+      militaryMusterRules,
+      worldFinancialRecords,
       diplomacy,
       claims,
     }),

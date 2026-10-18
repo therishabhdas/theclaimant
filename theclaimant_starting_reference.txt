@@ -831,7 +831,129 @@ DORNE:
 Sunspear; Shadow City; Water Gardens; Starfall; Yronwood; Skyreach; Kingsgrave; Godsgrace; Blackmont; Sandstone; Hellholt; Wyl; Lemonwood; Salt Shore; Spottswood; Ghost Hill; the Tor; Vaith; Greenblood; Torrentine; Boneway; Prince's Pass; Red Mountains; Dornish Marches; Planky Town.
 
 
-19. REFERENCE POLICY
+19. PLAYABLE CATALOG SNAPSHOT
+============================
+
+This is a snapshot of the Supabase catalog on 2026-10-18. It lists rows whose
+`is_playable` value was true at the time it was read: 40 characters and 30
+locations. The catalog is the source of truth for this list; this snapshot does
+not replace the live tables. Region, house, and location type are shown as
+stored. "Not set in catalog" means the corresponding catalog field was null.
+
+Playable Characters
+-------------------
+
+DORNE AND HOUSE MARTELL:
+- Doran Martell (Dorne; House Martell)
+- Ellaria Sand (Dorne; House Sand)
+- Oberyn Martell (Dorne; House Martell)
+
+HOUSE ARRYN AND THE VALE:
+- Lysa Arryn (The Vale; House Arryn)
+- Robert "Robin" Arryn (The Vale; House Arryn)
+- Yohn Royce (The Vale; House Royce)
+
+HOUSE BARATHEON AND ITS ALLIES:
+- Brienne of Tarth (The Stormlands; House Tarth)
+- Davos Seaworth (The Stormlands; House Seaworth)
+- Renly Baratheon (The Stormlands; House Baratheon)
+- Stannis Baratheon (The Stormlands; House Baratheon)
+
+HOUSE GREYJOY AND THE IRON ISLANDS:
+- Asha Greyjoy (The Iron Islands; House Greyjoy)
+- Balon Greyjoy (The Iron Islands; House Greyjoy)
+- Euron Greyjoy (region not set in catalog; House Greyjoy)
+
+HOUSE LANNISTER AND THE ROYAL COURT:
+- Cersei Lannister (The Westerlands; House Lannister)
+- Grand Maester Pycelle (The Crownlands; house not set in catalog)
+- Jaime Lannister (The Westerlands; House Lannister)
+- Joffrey Baratheon (The Crownlands; House Baratheon)
+- Petyr Baelish (The Crownlands; House Baelish)
+- Tyrion Lannister (The Westerlands; House Lannister)
+- Tywin Lannister (The Westerlands; House Lannister)
+- Varys (The Crownlands; house not set in catalog)
+
+HOUSE STARK AND ITS CIRCLE:
+- Arya Stark (The North; House Stark)
+- Bran Stark (The North; House Stark)
+- Catelyn Stark (The North; House Stark)
+- Eddard Stark (The North; House Stark)
+- Jon Snow (The North; House Stark household)
+- Rickon Stark (The North; House Stark)
+- Robb Stark (The North; House Stark)
+- Sansa Stark (The North; House Stark)
+- Theon Greyjoy (The North; House Greyjoy)
+
+HOUSE TULLY AND THE RIVERLANDS:
+- Brynden Tully (The Riverlands; House Tully)
+- Edmure Tully (The Riverlands; House Tully)
+- Walder Frey (The Riverlands; House Frey)
+
+HOUSE TYRELL AND THE REACH:
+- Loras Tyrell (The Reach; House Tyrell)
+- Mace Tyrell (The Reach; House Tyrell)
+- Margaery Tyrell (The Reach; House Tyrell)
+- Olenna Tyrell (The Reach; House Tyrell)
+
+OTHER IMPORTANT WESTEROSI CHARACTERS:
+- Melisandre (region and house not set in catalog)
+- Ramsay Snow (The North; House Bolton)
+- Roose Bolton (The North; House Bolton)
+
+Playable Locations
+------------------
+
+DORNE:
+- Starfall (castle; House Dayne)
+- Sunspear (coastal city; House Martell)
+- Yronwood (castle; House Yronwood)
+
+THE CROWNLANDS:
+- Dragonstone (island castle; House Baratheon)
+- Driftmark (island seat; House Velaryon)
+- Duskendale (port town; House Rykker)
+- King's Landing (capital city; House Baratheon)
+
+THE IRON ISLANDS:
+- Pyke (island castle; House Greyjoy)
+- Ten Towers (castle; House Harlaw)
+
+THE NORTH:
+- Moat Cailin (fortress; house not set in catalog)
+- The Dreadfort (castle; House Bolton)
+- White Harbor (port city; House Manderly)
+- Winterfell (castle; House Stark)
+
+THE REACH:
+- Highgarden (castle; House Tyrell)
+- Horn Hill (castle; House Tarly)
+- Oldtown (city port; House Hightower)
+- The Arbor (island port; House Redwyne)
+
+THE RIVERLANDS:
+- Harrenhal (castle; House Whent)
+- Maidenpool (port town; House Mooton)
+- Riverrun (castle; House Tully)
+- Seagard (coastal castle; House Mallister)
+- The Twins (castle crossing; House Frey)
+
+THE STORMLANDS:
+- Griffin's Roost (castle; House Connington)
+- Storm's End (coastal castle; House Baratheon)
+
+THE VALE:
+- Gulltown (port city; House Grafton)
+- Runestone (castle; House Royce)
+- The Eyrie (mountain castle; House Arryn)
+
+THE WESTERLANDS:
+- Casterly Rock (castle; House Lannister)
+- Lannisport (port city; House Lannister)
+- The Golden Tooth (fortress; House Lefford)
+
+
+20. REFERENCE POLICY
 ====================
 
 This document is a synthesized game reference for a personal, non-commercial roleplaying project. It is not an official publication and should not be treated as a substitute for any published work.

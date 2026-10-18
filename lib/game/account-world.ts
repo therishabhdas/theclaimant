@@ -72,7 +72,28 @@ export type CharacterAccountDetails = {
 export type RealmRegion = {
   id: number;
   name: string;
-  houses: { id: number; name: string; treasuryAmount: number | null; armySize: number | null }[];
+  houses: {
+    id: number;
+    name: string;
+    treasuryAmount: number | null;
+    treasuryIsEstimate: boolean;
+    treasurySourceNote: string | null;
+    debtAmount: number | null;
+    debtSummary: string | null;
+    armySize: number | null;
+  }[];
+  militaryEstimates: {
+    id: number;
+    forceName: string;
+    forceType: string;
+    minimumStrength: number | null;
+    maximumStrength: number | null;
+    strengthUnit: string;
+    confidenceLevel: string;
+    readinessStatus: string;
+    summary: string | null;
+    isGameplayAssumption: boolean;
+  }[];
   locations: { id: number; name: string; locationType: string; house: string | null }[];
   recentEvents: { id: number; title: string; publicSummary: string | null }[];
 };
@@ -288,6 +309,7 @@ export async function getRealmOverview(): Promise<RealmOverview> {
     stateResult,
     regionsResult,
     housesResult,
+    militaryEstimatesResult,
     locationsResult,
     warsResult,
     diplomacyResult,
@@ -301,8 +323,12 @@ export async function getRealmOverview(): Promise<RealmOverview> {
     supabase.from("world_regions").select("id, name").order("id"),
     supabase
       .from("houses")
-      .select("id, name, region_id, treasury_amount, army_size")
+      .select("id, name, region_id, treasury_amount, treasury_is_estimate, treasury_source_note, debt_amount, debt_summary, army_size")
       .order("name"),
+    supabase
+      .from("regional_military_estimates")
+      .select("id, region_id, force_name, force_type, minimum_strength, maximum_strength, strength_unit, confidence_level, readiness_status, summary, is_gameplay_assumption")
+      .order("force_name"),
     supabase
       .from("playable_locations")
       .select("id, name, location_type, region, world_region_id, house")
@@ -331,6 +357,7 @@ export async function getRealmOverview(): Promise<RealmOverview> {
   throwOnError(stateResult.error, "the current world state");
   throwOnError(regionsResult.error, "the regions");
   throwOnError(housesResult.error, "regional houses");
+  throwOnError(militaryEstimatesResult.error, "regional military estimates");
   throwOnError(locationsResult.error, "regional locations");
   throwOnError(warsResult.error, "current wars");
   throwOnError(diplomacyResult.error, "current diplomacy");
@@ -377,7 +404,25 @@ export async function getRealmOverview(): Promise<RealmOverview> {
           id: house.id,
           name: house.name,
           treasuryAmount: house.treasury_amount,
+          treasuryIsEstimate: house.treasury_is_estimate,
+          treasurySourceNote: house.treasury_source_note,
+          debtAmount: house.debt_amount,
+          debtSummary: house.debt_summary,
           armySize: house.army_size,
+        })),
+      militaryEstimates: (militaryEstimatesResult.data ?? [])
+        .filter((estimate) => estimate.region_id === region.id)
+        .map((estimate) => ({
+          id: estimate.id,
+          forceName: estimate.force_name,
+          forceType: estimate.force_type,
+          minimumStrength: estimate.minimum_strength,
+          maximumStrength: estimate.maximum_strength,
+          strengthUnit: estimate.strength_unit,
+          confidenceLevel: estimate.confidence_level,
+          readinessStatus: estimate.readiness_status,
+          summary: estimate.summary,
+          isGameplayAssumption: estimate.is_gameplay_assumption,
         })),
       locations: locations
         .filter((location) => location.world_region_id === region.id)

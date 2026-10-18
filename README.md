@@ -19,9 +19,15 @@ character knows more than they could plausibly have learned.
   pressures, and the nine regions of Westeros.
 - **About (`/about`)** — Explains the opening state, centers of power, world
   principles, and the distinction between public and private knowledge.
+- **System check (`/inspect`)** — An intentionally unlinked, public read-only
+  diagnostic page. It checks the registered application tables and their
+  expected columns, reports estimated row counts except for private tables,
+  and verifies that the configured Groq model is available without running
+  an inference request. Never add record contents or credential values to its
+  output.
 
-Both pages share the same navigation and footer and are designed to adapt to
-mobile and desktop screens.
+The home and About pages share navigation and a footer and adapt to mobile and
+desktop screens.
 
 ## Getting started
 
@@ -67,21 +73,43 @@ Then run [`supabase/opening-state-seed.sql`](./supabase/opening-state-seed.sql)
 to populate the opening snapshot from the starting reference. It seeds the nine
 regions, the Great Houses and named major houses, opening regional summaries,
 known historical wars, explicitly established betrothals and hostage status,
-the opening event, and the royal-parentage secret with only the specified
-characters marked as knowing or suspecting it. Existing character/location
-catalog rows are linked when present. It does not fabricate playable character
-or location catalog rows, a calendar date, season, resource totals, army sizes,
-or private character ambitions.
+the summer 298 AC clock (without inventing an exact day), opening treasury
+balances, regional military potential estimates, the opening event, and the
+royal-parentage secret with only the specified characters marked as knowing or
+suspecting it. Military estimates are regional potential, not troops already
+mustered; regional totals are not duplicated into individual house army counts.
+The Crown's zero liquid treasury is accompanied by a qualitative debt note;
+world-level financial records separately represent the reported debt lower
+bound, approximate Lannister creditor amount, and creditors whose allocations
+are unknown. The house balances are explicitly marked as game-balance estimates;
+they are not canon treasury figures. Force figures are approximate planning
+estimates, not verified canonical muster rolls. Fleet inventories, the
+Kingsguard, the low-confidence Dragonstone garrison, and muster timing rules are
+recorded separately; overlapping fleet estimates and the Iron Fleet subset are
+labelled so they are not added twice. Muster timing and liquid balances are
+gameplay assumptions rather than lore facts.
+Existing character/location catalog rows are linked when present. The scripts
+do not create playable character or location catalog rows, player assignments,
+player resource totals, annual revenue values, house-by-house troop
+allocations, or private character ambitions.
 
 The migration relates existing roster characters and locations to houses and
 regions, and adds connected records for house lands, lieges, claims, character
 traits, ambitions, loyalties and secrets, wars and participants, diplomacy,
-and event participants and state changes. The existing character assignment
+and event participants and state changes. It also creates
+`regional_military_estimates` to distinguish estimated levy potential from
+standing forces such as the City Watch; `military_muster_rules` records
+gameplay timing assumptions; and `world_financial_records` stores Crown-level
+debt and treasury information without folding it into a house treasury.
+Regional force rows carry confidence labels and distinguish source estimates
+from explicit gameplay assumptions. The
+existing character assignment
 remains the player's current-character link; it gains linked current location,
 resources, and personality fields. Existing character claim and location
 control data is linked where it can be matched. Unspecified facts such as
-treasury, army size, season, loyalties, or secret knowledge are left unknown
-instead of being invented.
+exact calendar day, per-house levy allocations, the exact opening royal fleet
+distribution, most exact garrison counts, and unrecorded character knowledge
+remain unknown instead of being invented.
 
 Copy `.env.example` to `.env.local` if needed and set
 `SUPABASE_SERVICE_ROLE_KEY` from your Supabase project's API settings. This key

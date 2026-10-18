@@ -18,7 +18,11 @@ alter table public.houses
   add column if not exists house_words text,
   add column if not exists opening_head text,
   add column if not exists opening_summary text,
-  add column if not exists current_summary text;
+  add column if not exists current_summary text,
+  add column if not exists treasury_is_estimate boolean not null default false,
+  add column if not exists treasury_source_note text,
+  add column if not exists debt_amount numeric(18, 2),
+  add column if not exists debt_summary text;
 
 alter table public.playable_characters
   add column if not exists birth_house_id bigint;
@@ -95,8 +99,8 @@ insert into public.world_state (
 values (
   1,
   null,
-  'Immediately after King Robert I Baratheon''s death during the hunt; the exact calendar date is not established.',
-  null,
+  'Summer 298 AC, shortly after King Robert I Baratheon''s death during the hunt; exact day unknown.',
+  'summer',
   'Robert is dead. Joffrey is treated by the court as heir, but the succession is vulnerable to dispute. No war of succession has begun.',
   'The game opens immediately after Robert I Baratheon''s death during the hunt. Joffrey is treated by the court as heir, but the succession is unresolved and no war of succession has begun.'
 )
@@ -150,6 +154,211 @@ from (
 ) as seed(name, opening_situation)
 where region.name = seed.name;
 
+-- These are estimates of regional potential, not forces already mustered.
+-- Keep the Crownlands' City Watch separate from its regional levy estimate.
+insert into public.regional_military_estimates (
+  world_state_id,
+  region_id,
+  force_name,
+  force_type,
+  minimum_strength,
+  maximum_strength,
+  strength_unit,
+  confidence_level,
+  readiness_status,
+  summary,
+  source_note,
+  is_gameplay_assumption
+)
+select
+  1,
+  region.id,
+  seed.force_name,
+  seed.force_type,
+  seed.minimum_strength,
+  seed.maximum_strength,
+  case when seed.force_type = 'fleet' then 'ships' else 'personnel' end,
+  case
+    when region.name in ('The Riverlands', 'Dorne') then 'very_low'
+    when seed.force_name = 'Kingsguard' then 'medium'
+    else 'low'
+  end,
+  seed.readiness_status,
+  seed.summary,
+  seed.source_note,
+  (
+    region.name in ('The Riverlands', 'Dorne')
+    and seed.force_name = 'Regional levy potential'
+  )
+from (
+  values
+    ('The North', 'Regional levy potential', 'regional_levy',
+      45000, 45000, 'potential',
+      'Estimated maximum regional forces available to call, not currently mustered.',
+      'Approximate planning estimate supplied for the campaign; not a precise canonical muster.'),
+    ('The Vale', 'Regional levy potential', 'regional_levy',
+      45000, 45000, 'potential',
+      'Estimated maximum regional forces available to call, not currently mustered.',
+      'Approximate planning estimate supplied for the campaign; full mobilization is uncertain.'),
+    ('The Riverlands', 'Regional levy potential', 'regional_levy',
+      45000, 45000, 'potential',
+      'Theoretical regional ceiling only; fragmented leadership makes a unified Riverlands muster unlikely.',
+      'Very-low-confidence game estimate. Includes House Frey''s approximately 4,000 and other Riverlands forces; do not add these house figures again.'),
+    ('The Iron Islands', 'Regional levy potential', 'regional_levy',
+      20000, 20000, 'potential',
+      'Approximate land-force potential, not troops currently mustered.',
+      'Low-confidence older semi-canon/lore-summary estimate; no house-by-house allocation supplied.'),
+    ('The Westerlands', 'Regional levy potential', 'regional_levy',
+      50000, 50000, 'potential',
+      'Estimated maximum regional forces available to call, not currently mustered.',
+      'Approximate planning estimate supplied for the campaign; not a precise canonical muster.'),
+    ('The Reach', 'Regional levy potential', 'regional_levy',
+      80000, 100000, 'potential',
+      'Estimated range of regional forces available to call, not currently mustered.',
+      'Approximate planning range supplied for the campaign; cavalry share and mustering rate remain unspecified.'),
+    ('The Stormlands', 'Regional levy potential', 'regional_levy',
+      30000, 30000, 'potential',
+      'Estimated maximum regional forces available to call, not currently mustered.',
+      'Approximate planning estimate supplied for the campaign; do not count later Renly or Stannis hosts as already raised.'),
+    ('The Crownlands', 'Regional levy potential', 'regional_levy',
+      10000, 15000, 'potential',
+      'Estimated range for forces of the Crownlands coastal lords; excludes the separately listed City Watch.',
+      'Approximate planning range supplied for the campaign.'),
+    ('The Crownlands', 'King''s Landing City Watch', 'city_watch',
+      2000, 2000, 'standing',
+      'The Gold Cloaks; standing city-watch estimate, separate from field levies.',
+      'Approximate strength supplied for the campaign.'),
+    ('The Crownlands', 'Kingsguard', 'standing_guard',
+      7, 7, 'standing',
+      'Seven serving Kingsguard members; a royal bodyguard, not a field army.',
+      'Opening roster count supplied for this campaign.'),
+    ('The Crownlands', 'Dragonstone garrison', 'garrison',
+      430, 430, 'unknown',
+      'Thirty knights, one hundred crossbowmen, and three hundred men-at-arms; low-confidence secondary/RPG estimate.',
+      'Secondary/RPG estimate only, not established novel canon.'),
+    ('The Crownlands', 'Royal fleet at the opening', 'fleet',
+      null::integer, null::integer, 'unknown',
+      'Exact opening inventory and distribution are not established.',
+      'A later near-opening account says about 50 ships remained at King''s Landing after Stannis took most of the rebuilt fleet to Dragonstone; do not apply that later distribution to this pre-claim opening.'),
+    ('The Iron Islands', 'Total longship inventory', 'fleet',
+      500, 500, 'unknown',
+      'Approximate total longship inventory; vessel readiness is unknown.',
+      'Low-confidence older semi-canon/lore-summary estimate. The Iron Fleet estimate below is a subset, not additional ships.'),
+    ('The Iron Islands', 'Iron Fleet subset', 'fleet',
+      100, 100, 'unknown',
+      'Approximate count of larger Iron Fleet vessels; included within total Iron Islands longships.',
+      'Low-confidence older semi-canon/lore-summary estimate; do not add to the total longship inventory.'),
+    ('The Reach', 'Redwyne warships', 'fleet',
+      200, 200, 'unknown',
+      'Estimated warship inventory; readiness and crews are unknown.',
+      'Approximate fleet estimate supplied for the campaign.'),
+    ('The Reach', 'Redwyne merchant and support vessels', 'fleet',
+      1000, 1000, 'unknown',
+      'Estimated non-warship merchant/support inventory; not fighting warships.',
+      'Approximate fleet estimate supplied for the campaign. Keep distinct from Redwyne warships.'),
+    ('The Westerlands', 'Lannisport mixed fleet estimate', 'fleet',
+      20, 30, 'unknown',
+      'Estimated mixed vessel count; vessel classes are not specified.',
+      'Older semi-canon estimate. Do not add to the separate, overlapping estimate of 50-60 large western ships.'),
+    ('The Westerlands', 'Western large-ship alternative estimate', 'fleet',
+      50, 60, 'unknown',
+      'Alternative estimate of large western ships; overlaps with the Lannisport mixed fleet estimate.',
+      'Older semi-canon estimate. Alternative to, not additive with, the 20-30 Lannisport mixed-vessel estimate.'),
+    ('Dorne', 'Regional levy potential', 'regional_levy',
+      40000, 45000, 'potential',
+      'Game estimate of regional force potential, not currently mustered.',
+      'Very-low-confidence planning range. The frequently repeated 50,000 figure is disputed and not adopted here.')
+) as seed(
+  region_name, force_name, force_type, minimum_strength, maximum_strength,
+  readiness_status, summary, source_note
+)
+join public.world_regions as region on region.name = seed.region_name
+on conflict (world_state_id, region_id, force_name) do update set
+  force_type = excluded.force_type,
+  minimum_strength = excluded.minimum_strength,
+  maximum_strength = excluded.maximum_strength,
+  strength_unit = excluded.strength_unit,
+  confidence_level = excluded.confidence_level,
+  readiness_status = excluded.readiness_status,
+  summary = excluded.summary,
+  source_note = excluded.source_note,
+  is_gameplay_assumption = excluded.is_gameplay_assumption,
+  updated_at = now();
+
+insert into public.military_muster_rules (
+  world_state_id,
+  region_id,
+  reference_key,
+  rule_name,
+  force_type,
+  minimum_days,
+  maximum_days,
+  target_strength,
+  summary,
+  is_gameplay_assumption,
+  source_note
+)
+select
+  1,
+  region.id,
+  seed.reference_key,
+  seed.rule_name,
+  seed.force_type,
+  seed.minimum_days,
+  seed.maximum_days,
+  seed.target_strength,
+  seed.summary,
+  seed.is_gameplay_assumption,
+  seed.source_note
+from (
+  values
+    ('opening-muster-household', null::text, 'Household force assembly',
+      'standing_guard', 1, 3, null::integer,
+      'Gameplay timing assumption for assembling a household force.',
+      true,
+      'Simulation rule only; not a universal lore fact.'),
+    ('opening-muster-local-bannerman', null::text, 'Local bannerman levy',
+      'regional_levy', 7, 21, null::integer,
+      'Gameplay timing assumption for a local bannerman levy.',
+      true,
+      'Simulation rule only; distance, willingness, roads, and weather modify timing.'),
+    ('opening-muster-regional', null::text, 'Regional muster',
+      'regional_levy', 21, 56, null::integer,
+      'Gameplay timing assumption for a regional muster.',
+      true,
+      'Simulation rule only; distance, willingness, roads, supply, and weather modify timing.'),
+    ('opening-muster-north', 'The North', 'North-wide muster',
+      'regional_levy', 42, 84, null::integer,
+      'Gameplay timing assumption for gathering a North-wide force.',
+      true,
+      'Simulation rule only; reflects the North''s scale and dispersed forces, not a fixed lore calendar.'),
+    ('opening-muster-highgarden-10000', 'The Reach', 'Highgarden 10,000-man claim',
+      'regional_levy', 14, 14, 10000,
+      'Claimed ability to raise 10,000 men in a fortnight.',
+      false,
+      'Reported later-dialogue benchmark; not an opening mobilization or guaranteed outcome.'),
+    ('opening-muster-highgarden-20000', 'The Reach', 'Highgarden 20,000-man claim',
+      'regional_levy', 30, 30, 20000,
+      'Claimed ability to raise 20,000 men in a month.',
+      false,
+      'Reported later-dialogue benchmark; not an opening mobilization or guaranteed outcome.')
+) as seed(
+  reference_key, region_name, rule_name, force_type, minimum_days,
+  maximum_days, target_strength, summary, is_gameplay_assumption, source_note
+)
+left join public.world_regions as region on region.name = seed.region_name
+on conflict (reference_key) do update set
+  region_id = excluded.region_id,
+  rule_name = excluded.rule_name,
+  force_type = excluded.force_type,
+  minimum_days = excluded.minimum_days,
+  maximum_days = excluded.maximum_days,
+  target_strength = excluded.target_strength,
+  summary = excluded.summary,
+  is_gameplay_assumption = excluded.is_gameplay_assumption,
+  source_note = excluded.source_note,
+  updated_at = now();
+
 insert into public.houses (
   name,
   seat_name,
@@ -167,6 +376,7 @@ values
   ('House Targaryen', null, null, 'Viserys and Daenerys survive in exile', 'The dynasty was overthrown in Robert''s Rebellion. Viserys and Daenerys are outside Westeros at the opening.', 'The dynasty was overthrown in Robert''s Rebellion. Viserys and Daenerys are outside Westeros at the opening.'),
   ('House Tyrell', 'Highgarden', 'Growing Strong', 'Mace Tyrell', 'House Tyrell rules the Reach. Its stance in the succession crisis is uncommitted; Margaery is unmarried at the opening.', 'House Tyrell rules the Reach. Its stance in the succession crisis is uncommitted; Margaery is unmarried at the opening.'),
   ('House Baratheon', 'Storm''s End', 'Ours Is the Fury', 'Robert is dead; Stannis and Renly have competing interests', 'The Baratheon family''s succession is unsettled. Stannis controls Dragonstone; Renly is in King''s Landing. The Stormlands'' alignment is not settled.', 'The Baratheon family''s succession is unsettled. Stannis controls Dragonstone; Renly is in King''s Landing. The Stormlands'' alignment is not settled.'),
+  ('House Baratheon of King''s Landing', 'King''s Landing', 'Ours Is the Fury', 'Robert I is dead; Joffrey is treated as heir by the court', 'The Crown and royal household are based at King''s Landing. The court treats Joffrey as heir, but the succession is not uncontested. Robert''s reign left the Crown deeply indebted.', 'The Crown and royal household are based at King''s Landing. The court treats Joffrey as heir, but the succession is not uncontested. Robert''s reign left the Crown deeply indebted.'),
   ('House Nymeros Martell', 'Sunspear', 'Unbowed, Unbent, Unbroken', 'Doran Martell', 'Dorne remains formally part of the realm. The Martells retain grievances against the Lannisters, but no open uprising is underway.', 'Dorne remains formally part of the realm. The Martells retain grievances against the Lannisters, but no open uprising is underway.'),
   ('House Baratheon of Dragonstone', 'Dragonstone', 'Ours Is the Fury', 'Stannis Baratheon', 'Stannis Baratheon holds Dragonstone and is Robert''s elder surviving brother. His conclusions and support are not automatically known to every lord.','Stannis Baratheon holds Dragonstone and is Robert''s elder surviving brother. His conclusions and support are not automatically known to every lord.'),
   ('House Bolton', 'The Dreadfort', null, 'Roose Bolton', 'A powerful northern house and historic Stark rival. Do not presume a later betrayal.','A powerful northern house and historic Stark rival. Do not presume a later betrayal.'),
@@ -327,7 +537,9 @@ from (
     ('House Crane', 'The Reach'), ('House Merryweather', 'The Reach'),
     ('House Beesbury', 'The Reach'), ('House Ashford', 'The Reach'),
     ('House Caswell', 'The Reach'), ('House Peake', 'The Reach'), ('House Webber', 'The Reach'),
-    ('House Baratheon', 'The Stormlands'), ('House Baratheon of Dragonstone', 'The Crownlands'),
+    ('House Baratheon', 'The Stormlands'),
+    ('House Baratheon of King''s Landing', 'The Crownlands'),
+    ('House Baratheon of Dragonstone', 'The Crownlands'),
     ('House Estermont', 'The Stormlands'), ('House Tarth', 'The Stormlands'),
     ('House Swann', 'The Stormlands'), ('House Selmy', 'The Stormlands'),
     ('House Dondarrion', 'The Stormlands'), ('House Caron', 'The Stormlands'),
@@ -352,6 +564,94 @@ from (
 ) as assignment(house_name, region_name)
 join public.world_regions as region on region.name = assignment.region_name
 where house.name = assignment.house_name;
+
+-- These opening liquid balances are explicitly game-balance estimates.
+-- Rerunning the seed after campaign events will not reset changed balances.
+update public.houses as house
+set treasury_amount = seed.treasury_amount,
+    treasury_is_estimate = true,
+    treasury_source_note = seed.source_note
+from (
+  values
+    ('House Lannister', 2000000::numeric, 'Campaign liquid-balance estimate; not a canon treasury figure.'),
+    ('House Tyrell', 1500000::numeric, 'Campaign liquid-balance estimate; not a canon treasury figure.'),
+    ('House Arryn', 500000::numeric, 'Campaign liquid-balance estimate; not a canon treasury figure.'),
+    ('House Stark', 350000::numeric, 'Campaign liquid-balance estimate; not a canon treasury figure.'),
+    ('House Tully', 250000::numeric, 'Campaign liquid-balance estimate; not a canon treasury figure.'),
+    ('House Greyjoy', 150000::numeric, 'Campaign liquid-balance estimate; not a canon treasury figure; reaving income is not included.'),
+    ('House Baratheon', 250000::numeric, 'Campaign liquid-balance estimate for Storm''s End; not a canon treasury figure.'),
+    ('House Baratheon of Dragonstone', 75000::numeric, 'Campaign liquid-balance estimate; not a canon treasury figure.'),
+    ('House Nymeros Martell', 250000::numeric, 'Campaign liquid-balance estimate; not a canon treasury figure.'),
+    ('House Hightower', 500000::numeric, 'Campaign bannerman liquid-balance estimate; not a canon treasury figure.'),
+    ('House Redwyne', 400000::numeric, 'Campaign bannerman liquid-balance estimate; not a canon treasury figure.'),
+    ('House Manderly', 200000::numeric, 'Campaign bannerman liquid-balance estimate; not a canon treasury figure.'),
+    ('House Frey', 200000::numeric, 'Campaign bannerman liquid-balance estimate; not a canon treasury figure.'),
+    ('House Grafton', 175000::numeric, 'Campaign bannerman liquid-balance estimate; not a canon treasury figure.'),
+    ('House Royce', 125000::numeric, 'Campaign bannerman liquid-balance estimate; not a canon treasury figure.'),
+    ('House Mallister', 125000::numeric, 'Campaign bannerman liquid-balance estimate; not a canon treasury figure.'),
+    ('House Harlaw', 100000::numeric, 'Campaign bannerman liquid-balance estimate; not a canon treasury figure.'),
+    ('House Velaryon', 150000::numeric, 'Campaign bannerman liquid-balance estimate; not a canon treasury figure.')
+) as seed(house_name, treasury_amount, source_note)
+where house.name = seed.house_name
+  and not exists (
+    select 1
+    from public.game_events
+    where reference_key is distinct from 'opening-snapshot'
+  );
+
+insert into public.world_financial_records (
+  world_state_id,
+  reference_key,
+  record_type,
+  subject_name,
+  creditor_name,
+  amount,
+  lower_bound,
+  amount_qualifier,
+  summary,
+  is_gameplay_assumption,
+  source_note
+)
+values
+  (1, 'opening-crown-liquid-treasury', 'liquid_treasury',
+    'Crown / Iron Throne', null, 0, null, 'gameplay_convention',
+    'No freely spendable liquid treasury for opening gameplay.',
+    true, 'Zero is a gameplay convention, not a claim that a canonical audit counted exactly zero coins.'),
+  (1, 'opening-crown-total-debt', 'debt',
+    'Crown / Iron Throne', null, null, 6000000, 'greater_than',
+    'The Crown owes more than six million gold dragons; exact total unknown.',
+    false, 'Reported lower bound; do not infer an exact total or fill missing creditor allocations.'),
+  (1, 'opening-crown-debt-lannister', 'debt',
+    'Crown / Iron Throne', 'House Lannister', 3000000, null, 'approximately',
+    'Approximately three million gold dragons owed to House Lannister.',
+    false, 'Approximate reported creditor amount.'),
+  (1, 'opening-crown-debt-tyrell', 'debt',
+    'Crown / Iron Throne', 'Mace Tyrell', null, null, 'unknown',
+    'Creditor identified; amount not established.',
+    false, 'Do not allocate an invented amount.'),
+  (1, 'opening-crown-debt-iron-bank', 'debt',
+    'Crown / Iron Throne', 'Iron Bank of Braavos', null, null, 'unknown',
+    'Creditor identified; amount not established.',
+    false, 'Do not allocate an invented amount.'),
+  (1, 'opening-crown-debt-tyroshi-cartels', 'debt',
+    'Crown / Iron Throne', 'Tyroshi trading cartels', null, null, 'unknown',
+    'Creditor group identified; amount not established.',
+    false, 'Do not allocate an invented amount.'),
+  (1, 'opening-crown-debt-faith', 'debt',
+    'Crown / Iron Throne', 'Faith of the Seven', null, null, 'unknown',
+    'Creditor identified; amount not established.',
+    false, 'Do not allocate an invented amount.')
+on conflict (reference_key) do update set
+  record_type = excluded.record_type,
+  subject_name = excluded.subject_name,
+  creditor_name = excluded.creditor_name,
+  amount = excluded.amount,
+  lower_bound = excluded.lower_bound,
+  amount_qualifier = excluded.amount_qualifier,
+  summary = excluded.summary,
+  is_gameplay_assumption = excluded.is_gameplay_assumption,
+  source_note = excluded.source_note,
+  updated_at = now();
 
 -- Only use a location-name match when it is unique in the existing catalogue.
 update public.houses as house
@@ -654,7 +954,7 @@ select
   'opening-snapshot',
   transaction_timestamp(),
   1,
-  'Opening snapshot; exact calendar date and season unknown',
+  'Summer 298 AC; exact day unknown',
   'political',
   'The opening situation after Robert I Baratheon''s death',
   'Robert I Baratheon is dead. Joffrey is treated by the royal court as heir, but the legitimacy question is unresolved. Eddard Stark is Hand. Jon Arryn is dead. Stannis is at Dragonstone; Renly is in King''s Landing. No war of succession has begun. House positions and regional situations are initialized from the supplied starting reference.',
@@ -676,6 +976,7 @@ select
     where house.name in (
       'House Stark', 'House Arryn', 'House Tully', 'House Greyjoy',
       'House Lannister', 'House Tyrell', 'House Baratheon',
+      'House Baratheon of King''s Landing',
       'House Baratheon of Dragonstone', 'House Nymeros Martell'
     )
   ), '{}'::bigint[]),
@@ -685,6 +986,10 @@ select
 where not exists (
   select 1 from public.game_events where reference_key = 'opening-snapshot'
 );
+
+update public.game_events
+set world_date_label = 'Summer 298 AC; exact day unknown'
+where reference_key = 'opening-snapshot';
 
 -- Keep the succession secret canonical and private. Do not mark the other
 -- characters as knowing it: the reference supports only these knowledge states.
@@ -770,3 +1075,44 @@ select reference_key, relation_type, status
 from public.diplomacy_records
 where reference_key like 'opening-%'
 order by reference_key;
+
+select
+  region.name,
+  estimate.force_name,
+  estimate.minimum_strength,
+  estimate.maximum_strength,
+  estimate.strength_unit,
+  estimate.confidence_level,
+  estimate.readiness_status,
+  estimate.is_gameplay_assumption
+from public.regional_military_estimates as estimate
+join public.world_regions as region on region.id = estimate.region_id
+order by region.id, estimate.force_name;
+
+select name, treasury_amount, debt_amount, debt_summary
+from public.houses
+where treasury_amount is not null or debt_amount is not null or debt_summary is not null
+order by name;
+
+select
+  reference_key,
+  record_type,
+  subject_name,
+  creditor_name,
+  amount,
+  lower_bound,
+  amount_qualifier,
+  is_gameplay_assumption
+from public.world_financial_records
+where reference_key like 'opening-%'
+order by reference_key;
+
+select
+  rule_name,
+  minimum_days,
+  maximum_days,
+  target_strength,
+  is_gameplay_assumption
+from public.military_muster_rules
+where reference_key like 'opening-%'
+order by minimum_days, rule_name;

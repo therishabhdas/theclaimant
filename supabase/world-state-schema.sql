@@ -54,11 +54,21 @@ create table if not exists public.houses (
   seat_location_id bigint,
   liege_house_id bigint references public.houses(id) on delete set null,
   treasury_amount numeric(18, 2),
+  treasury_is_estimate boolean not null default false,
+  treasury_source_note text,
+  debt_amount numeric(18, 2),
+  debt_summary text,
   army_size integer check (army_size is null or army_size >= 0),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   check (liege_house_id is null or liege_house_id <> id)
 );
+
+alter table public.houses
+  add column if not exists treasury_is_estimate boolean not null default false,
+  add column if not exists treasury_source_note text,
+  add column if not exists debt_amount numeric(18, 2),
+  add column if not exists debt_summary text;
 
 -- Create house records from the existing roster and location catalogue.
 insert into public.houses (name)
@@ -326,6 +336,116 @@ create table if not exists public.war_participants (
   source_event_id bigint references public.game_events(id) on delete set null,
   primary key (war_id, house_id),
   check (left_on is null or joined_on is null or left_on >= joined_on)
+);
+
+create table if not exists public.regional_military_estimates (
+  id bigint generated always as identity primary key,
+  world_state_id smallint not null default 1
+    references public.world_state(id) on delete restrict,
+  region_id smallint not null
+    references public.world_regions(id) on delete cascade,
+  force_name text not null check (length(trim(force_name)) > 0),
+  force_type text not null check (
+    force_type in (
+      'regional_levy', 'standing_guard', 'city_watch', 'garrison',
+      'fleet', 'other'
+    )
+  ),
+  minimum_strength integer,
+  maximum_strength integer,
+  strength_unit text not null default 'personnel'
+    check (strength_unit in ('personnel', 'ships', 'other')),
+  confidence_level text not null default 'unrated'
+    check (
+      confidence_level in ('high', 'medium', 'low', 'very_low', 'unrated')
+    ),
+  readiness_status text not null default 'potential'
+    check (
+      readiness_status in (
+        'potential', 'not_mustered', 'partial_muster', 'mustered',
+        'standing', 'unknown'
+      )
+    ),
+  summary text,
+  source_note text,
+  is_gameplay_assumption boolean not null default false,
+  source_event_id bigint references public.game_events(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (world_state_id, region_id, force_name),
+  check (
+    (minimum_strength is null and maximum_strength is null)
+    or (
+      minimum_strength is not null and maximum_strength is not null
+      and minimum_strength >= 0
+      and maximum_strength >= minimum_strength
+    )
+  )
+);
+
+alter table public.regional_military_estimates
+  add column if not exists confidence_level text not null default 'unrated',
+  add column if not exists is_gameplay_assumption boolean not null default false;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'regional_military_estimates_confidence_level_check'
+      and conrelid = 'public.regional_military_estimates'::regclass
+  ) then
+    alter table public.regional_military_estimates
+      add constraint regional_military_estimates_confidence_level_check
+      check (confidence_level in ('high', 'medium', 'low', 'very_low', 'unrated'));
+  end if;
+end
+$$;
+
+create table if not exists public.military_muster_rules (
+  id bigint generated always as identity primary key,
+  world_state_id smallint not null default 1
+    references public.world_state(id) on delete restrict,
+  region_id smallint references public.world_regions(id) on delete cascade,
+  reference_key text not null unique,
+  rule_name text not null check (length(trim(rule_name)) > 0),
+  force_type text not null,
+  minimum_days integer not null check (minimum_days >= 0),
+  maximum_days integer not null check (maximum_days >= minimum_days),
+  target_strength integer check (target_strength is null or target_strength >= 0),
+  summary text not null,
+  is_gameplay_assumption boolean not null default true,
+  source_note text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.world_financial_records (
+  id bigint generated always as identity primary key,
+  world_state_id smallint not null default 1
+    references public.world_state(id) on delete restrict,
+  reference_key text not null unique,
+  record_type text not null check (
+    record_type in ('liquid_treasury', 'debt', 'annual_revenue')
+  ),
+  subject_name text not null check (length(trim(subject_name)) > 0),
+  creditor_name text,
+  amount numeric(18, 2),
+  lower_bound numeric(18, 2),
+  amount_qualifier text not null check (
+    amount_qualifier in (
+      'exact', 'approximately', 'greater_than', 'estimate', 'unknown',
+      'gameplay_convention'
+    )
+  ),
+  currency text not null default 'gold dragons',
+  summary text,
+  is_gameplay_assumption boolean not null default false,
+  source_note text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (amount is null or amount >= 0),
+  check (lower_bound is null or lower_bound >= 0)
 );
 
 create table if not exists public.diplomacy_records (
@@ -648,6 +768,12 @@ create index if not exists political_claims_house_idx
   on public.political_claims (claimant_house_id);
 create index if not exists world_wars_status_idx
   on public.world_wars (status);
+create index if not exists regional_military_estimates_region_idx
+  on public.regional_military_estimates (region_id, force_type);
+create index if not exists military_muster_rules_region_idx
+  on public.military_muster_rules (region_id, force_type);
+create index if not exists world_financial_records_type_idx
+  on public.world_financial_records (record_type, subject_name);
 create index if not exists diplomacy_records_houses_idx
   on public.diplomacy_records (house_a_id, house_b_id);
 create index if not exists game_events_world_timeline_idx
@@ -721,6 +847,9 @@ alter table public.character_secret_knowledge enable row level security;
 alter table public.political_claims enable row level security;
 alter table public.world_wars enable row level security;
 alter table public.war_participants enable row level security;
+alter table public.regional_military_estimates enable row level security;
+alter table public.military_muster_rules enable row level security;
+alter table public.world_financial_records enable row level security;
 alter table public.diplomacy_records enable row level security;
 alter table public.event_characters enable row level security;
 alter table public.event_houses enable row level security;
@@ -733,6 +862,8 @@ revoke all on public.world_state, public.world_regions, public.houses,
   public.character_ambitions, public.character_loyalties,
   public.character_secrets, public.character_secret_knowledge,
   public.political_claims, public.world_wars, public.war_participants,
+  public.regional_military_estimates, public.military_muster_rules,
+  public.world_financial_records,
   public.diplomacy_records, public.event_characters, public.event_houses,
   public.event_locations, public.event_state_changes, public.house_claims
 from anon, authenticated;
@@ -742,6 +873,8 @@ grant select, insert, update, delete on public.world_state, public.world_regions
   public.character_ambitions, public.character_loyalties,
   public.character_secrets, public.character_secret_knowledge,
   public.political_claims, public.world_wars, public.war_participants,
+  public.regional_military_estimates, public.military_muster_rules,
+  public.world_financial_records,
   public.diplomacy_records, public.event_characters, public.event_houses,
   public.event_locations, public.event_state_changes, public.house_claims
 to service_role;
@@ -756,6 +889,9 @@ grant usage, select on sequence
   public.character_secrets_id_seq,
   public.political_claims_id_seq,
   public.world_wars_id_seq,
+  public.regional_military_estimates_id_seq,
+  public.military_muster_rules_id_seq,
+  public.world_financial_records_id_seq,
   public.diplomacy_records_id_seq,
   public.event_state_changes_id_seq,
   public.house_claims_id_seq
