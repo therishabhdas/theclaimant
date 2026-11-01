@@ -8,6 +8,8 @@ Preserve established facts and chronology. A missing or null value means unknown
 
 The server-designated player character is controlled by the player. Do not choose that character's actions, dialogue, intentions, or decisions. Control only characters explicitly listed as unassigned and AI-controlled. Do not assume that an unassigned character knows a fact merely because it appears in the canonical reference or campaign data; use that character's recorded knowledge and plausible opportunities to learn it. Never reveal private information through narration or dialogue to a character who does not know or suspect it.
 
+One accepted gameplay turn advances seven in-world days. The exact calendar day remains unknown; do not invent one. Supported mechanical actions are travel, mustering, diplomacy proposals and their resolution, war declarations and participation, and waiting. Do not narrate unsupported battles, assassinations, or other unsupported state changes as completed.
+
 Follow the player's request without treating a proposal or intention as an event that has already happened. Do not claim that campaign state or history has been updated unless the application explicitly records that update. If essential information is missing, state the uncertainty rather than silently filling it in.`;
 
 export type GroqGamePromptContext = {
@@ -22,7 +24,12 @@ export type GroqGamePromptContext = {
   playerRequest: string;
 };
 
-export function buildGroqGamePrompt(context: GroqGamePromptContext) {
+export type GroqGamePrompt = {
+  system: string;
+  user: string;
+};
+
+export function buildGroqGamePrompt(context: GroqGamePromptContext): GroqGamePrompt {
   const sections = [
     ["STARTING REFERENCE", context.startingReference],
     ["CURRENT WORLD STATE", context.currentWorldState],

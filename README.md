@@ -10,8 +10,9 @@ Westeros, and the principles that shape the game's world: power depends on
 people and material resources, information takes time to travel, and no
 character knows more than they could plausibly have learned.
 
-> The website is an introduction to the game and its setting. It does not
-> currently implement interactive gameplay.
+> The website remains an introduction to the game and its setting. A
+> server-side gameplay turn endpoint is available; an interactive gameplay
+> interface is not yet included.
 
 ## Pages
 
@@ -55,8 +56,9 @@ The Groq SDK is installed and the server-only client is available in
 
 `createGroqClient()` creates an SDK client using that key, and `GROQ_MODEL` is
 set to `openai/gpt-oss-120b`. Creating the client does not send a request to
-Groq; no model calls are made by the site yet. The API key must only be used in
-server-side code, never in a Client Component or a `NEXT_PUBLIC_` variable.
+Groq; an authenticated gameplay turn sends a server-side inference request.
+The API key must only be used in server-side code, never in a Client Component
+or a `NEXT_PUBLIC_` variable.
 
 ### World state and event log
 
@@ -128,6 +130,13 @@ an individual step needs retrying.
 7. [`travel-system-06-seed.sql`](./supabase/travel-system-06-seed.sql)
 8. [`travel-system-07-seed.sql`](./supabase/travel-system-07-seed.sql)
 
+After the travel scripts, run
+[`supabase/gameplay-engine.sql`](./supabase/gameplay-engine.sql). It adds
+serialized, idempotent turn commits; seven-day turn progression; deterministic
+travel arrival and muster completion; and private gameplay-turn and muster
+order records. The migration grants its commit procedure only to
+`service_role`.
+
 The scripts create the workbook-backed route graph, linked route alternatives
 and legs, waypoint and source records, travel assumptions, and campaign
 journey tables, and archive the workbook rows. They expect the 30 workbook
@@ -168,8 +177,44 @@ ambitions, loyalties, claims, and only that character's known or suspected
 secrets. Its realm overview uses public events and diplomacy records marked
 `is_public`; keep private political information out of those public summaries.
 If the world-state migration was already run, rerun its latest version to add
-the public visibility fields used by the account overview. No page or gameplay
-action writes events or calls Groq yet.
+the public visibility fields used by the account overview.
+
+### Gameplay turns
+
+The authenticated, same-origin `POST /api/game/turn` endpoint accepts:
+
+```json
+{
+  "requestId": "a-unique-uuid",
+  "playerRequest": "The player's in-character request"
+}
+```
+
+It uses Groq to return structured actions, then validates and simulates them
+server-side before calling the atomic Supabase commit procedure. The engine
+supports character travel on routes with available travel estimates, regional
+levy muster orders, private diplomacy proposals and responses, war declarations
+and joining an active war, and waiting. A successful turn advances seven
+in-world days while leaving the exact calendar date unknown. Travel and muster
+progress are recorded against that turn clock; arrival updates the character's
+location and emits an event.
+
+Regional muster capacity is a gameplay use of the seeded regional potential
+estimates; it does not allocate or infer an opening army size for an individual
+house. Wars do not yet resolve battles, casualties, supply, or troop movement.
+Unknown route availability remains unknown, and a route action uses its
+recorded party travel estimate rather than inventing a route or speed. Known
+closed, restricted, blockaded, destroyed, and permission-gated legs are rejected.
+
+The endpoint requires one assigned character, the Groq and Supabase server
+environment variables above, and all listed SQL migrations including
+`gameplay-engine.sql`. Each request needs a unique UUID; retries with the same
+ID return the original result. Concurrent turns use a world revision check, so
+a stale action is rejected rather than committed against a different state.
+Events and diplomacy proposals remain private by default; the endpoint returns
+the narrative only to the authenticated requester.
+
+Run the focused deterministic engine tests with `npm run test:game`.
 
 Start the local development server:
 
@@ -188,6 +233,7 @@ files in `app/` are reflected during development.
 | `npm run build` | Create a production build. |
 | `npm run start` | Serve the production build locally. Run `npm run build` first. |
 | `npm run lint` | Run ESLint across the project. |
+| `npm run test:game` | Run deterministic engine tests (requires Node.js TypeScript stripping support). |
 
 ## Project structure
 
@@ -202,7 +248,7 @@ app/
   page.tsx               Home page
 lib/
   ai/                    Groq client and prompt formatting
-  game/                  Campaign state and character helpers
+  game/                  Gameplay engine, turn service, and campaign helpers
   supabase/              Supabase browser, server, and middleware clients
 supabase/                SQL schemas, seeds, and the travel-system migration
 public/                   Static assets
