@@ -111,6 +111,36 @@ exact calendar day, per-house levy allocations, the exact opening royal fleet
 distribution, most exact garrison counts, and unrecorded character knowledge
 remain unknown instead of being invented.
 
+### Travel network and journeys
+
+After running `event-log.sql`, `world-state-schema.sql`, and
+`opening-state-seed.sql` in that order, run each travel script below
+individually in the Supabase SQL Editor, in numerical order. Do not paste the
+scripts together; each is sized for the SQL Editor and can be rerun safely if
+an individual step needs retrying.
+
+1. [`travel-system-00-schema.sql`](./supabase/travel-system-00-schema.sql)
+2. [`travel-system-01-seed.sql`](./supabase/travel-system-01-seed.sql)
+3. [`travel-system-02-seed.sql`](./supabase/travel-system-02-seed.sql)
+4. [`travel-system-03-seed.sql`](./supabase/travel-system-03-seed.sql)
+5. [`travel-system-04-seed.sql`](./supabase/travel-system-04-seed.sql)
+6. [`travel-system-05-seed.sql`](./supabase/travel-system-05-seed.sql)
+7. [`travel-system-06-seed.sql`](./supabase/travel-system-06-seed.sql)
+8. [`travel-system-07-seed.sql`](./supabase/travel-system-07-seed.sql)
+
+The scripts create the workbook-backed route graph, linked route alternatives
+and legs, waypoint and source records, travel assumptions, and campaign
+journey tables, and archive the workbook rows. They expect the 30 workbook
+location names to match the existing `playable_locations` catalogue.
+
+Distances are approximate map-calibrated ranges, not official canon
+measurements. Pairwise route choices minimize edge midpoint distance; they do
+not automatically optimize travel time, risk, cost, capacity, permission, or
+current availability. Route availability starts as unknown. In particular,
+the Kingsroad option from King's Landing to Winterfell does not require the
+Twins; preserve alternative routes rather than treating one itinerary as
+mandatory.
+
 Copy `.env.example` to `.env.local` if needed and set
 `SUPABASE_SERVICE_ROLE_KEY` from your Supabase project's API settings. This key
 grants privileged database access: keep it secret and use it only in
@@ -174,7 +204,7 @@ lib/
   ai/                    Groq client and prompt formatting
   game/                  Campaign state and character helpers
   supabase/              Supabase browser, server, and middleware clients
-supabase/                SQL schema, event-log, and opening-state scripts
+supabase/                SQL schemas, seeds, and the travel-system migration
 public/                   Static assets
 theclaimant_starting_reference.txt
                           World-state reference for the opening setting
