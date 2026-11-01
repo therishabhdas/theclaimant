@@ -64,6 +64,46 @@ const tableDefinitions: TableDefinition[] = [
     ],
   },
   {
+    name: "gameplay_turn_participants",
+    group: "Private game state",
+    hideRowCount: true,
+    columns: [
+      "world_state_id smallint PK/FK", "turn_number integer PK",
+      "user_id uuid PK/FK", "character_id integer FK", "created_at timestamptz",
+    ],
+  },
+  {
+    name: "gameplay_turn_orders",
+    group: "Private game state",
+    hideRowCount: true,
+    columns: [
+      "id bigint PK", "request_id uuid", "world_state_id smallint FK",
+      "turn_number integer", "user_id uuid", "character_id integer FK",
+      "player_request text", "action_data jsonb", "resolution_status text",
+      "resolution_note text", "created_at timestamptz",
+    ],
+  },
+  {
+    name: "gameplay_npc_orders",
+    group: "Private game state",
+    hideRowCount: true,
+    columns: [
+      "world_state_id smallint PK/FK", "turn_number integer PK",
+      "character_id integer PK/FK", "action_data jsonb", "resolution_status text",
+      "resolution_note text", "created_at timestamptz", "updated_at timestamptz",
+    ],
+  },
+  {
+    name: "gameplay_turn_resolutions",
+    group: "Private game state",
+    hideRowCount: true,
+    columns: [
+      "id bigint PK", "world_state_id smallint FK", "turn_number integer",
+      "gameplay_revision bigint", "event_id bigint FK", "canonical_summary text",
+      "resolution_data jsonb", "resolved_at timestamptz",
+    ],
+  },
+  {
     name: "user_character_assignments",
     group: "Private game state",
     hideRowCount: true,
@@ -90,6 +130,8 @@ const tableDefinitions: TableDefinition[] = [
     columns: [
       "id smallint PK", "world_date date", "date_description text", "season text",
       "current_situation text", "updated_at timestamptz", "opening_situation text",
+      "turn_number integer", "elapsed_days integer", "gameplay_revision bigint",
+      "turn_phase text", "planning_deadline_at timestamptz", "resolution_started_at timestamptz",
     ],
   },
   {

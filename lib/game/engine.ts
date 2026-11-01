@@ -1,5 +1,5 @@
 export const GAME_TURN_DAYS = 7;
-export const MAX_ACTIONS_PER_TURN = 8;
+export const MAX_ACTIONS_PER_TURN = 1;
 
 export const GAME_EVENT_TYPES = [
   "political",
@@ -99,6 +99,19 @@ export type StructuredGameTurn = {
   eventType: SupportedTurnEventType;
   eventSummary: string;
   actions: GameAction[];
+};
+
+export type WorldTurnOrderDecision = {
+  actorCharacterId: number;
+  decision: "accept" | "reject";
+  reason: string;
+};
+
+export type StructuredWorldTurnResolution = {
+  decisions: WorldTurnOrderDecision[];
+  eventTitle: string;
+  eventType: SupportedTurnEventType;
+  canonicalSummary: string;
 };
 
 export type EngineCharacter = {
@@ -407,6 +420,55 @@ export function parseStructuredGameTurn(value: unknown): StructuredGameTurn {
   };
 }
 
+export function parseStructuredWorldTurnResolution(
+  value: unknown,
+  expectedActorIds: number[],
+): StructuredWorldTurnResolution {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, ["decisions", "eventTitle", "eventType", "canonicalSummary"]) ||
+    !isText(value.eventTitle, 160) ||
+    !isOneOf(value.eventType, SUPPORTED_TURN_EVENT_TYPES) ||
+    !isText(value.canonicalSummary, 4000) ||
+    !Array.isArray(value.decisions) ||
+    value.decisions.length !== expectedActorIds.length
+  ) {
+    throw new Error("The generated world-turn resolution has an invalid response shape.");
+  }
+
+  const expected = new Set(expectedActorIds);
+  const seen = new Set<number>();
+  const decisions = value.decisions.map((entry) => {
+    if (
+      !isRecord(entry) ||
+      !hasExactKeys(entry, ["actorCharacterId", "decision", "reason"]) ||
+      !isPositivePgInteger(entry.actorCharacterId) ||
+      !isOneOf(entry.decision, ["accept", "reject"]) ||
+      !isText(entry.reason, 1000) ||
+      !expected.has(entry.actorCharacterId) ||
+      seen.has(entry.actorCharacterId)
+    ) {
+      throw new Error("The generated world-turn resolution contains an invalid order decision.");
+    }
+    seen.add(entry.actorCharacterId);
+    return {
+      actorCharacterId: entry.actorCharacterId,
+      decision: entry.decision,
+      reason: entry.reason.trim(),
+    };
+  });
+  if (seen.size !== expected.size) {
+    throw new Error("The generated world-turn resolution omitted an order.");
+  }
+
+  return {
+    decisions,
+    eventTitle: value.eventTitle.trim(),
+    eventType: value.eventType,
+    canonicalSummary: value.canonicalSummary.trim(),
+  };
+}
+
 function characterHouse(snapshot: EngineSnapshot, characterId: number) {
   return snapshot.characters.find((character) => character.id === characterId)?.currentHouseId ?? null;
 }
@@ -684,6 +746,41 @@ export function simulateGameTurn(
   snapshot: EngineSnapshot,
   turn: StructuredGameTurn,
 ): GameTurnResult {
+  const result = simulateSimultaneousWorldTurn(
+    snapshot,
+    turn.actions.map((action) => ({
+      action,
+      decision: "accept" as const,
+      reason: "Accepted.",
+    })),
+  );
+  const rejected = result.orderResults.filter((order) => order.status === "rejected");
+  if (rejected.length > 0) {
+    throw new GameActionValidationError(rejected.map((order) => order.reason));
+  }
+  return {
+    snapshot: result.snapshot,
+    resolvedEvents: result.resolvedEvents,
+  };
+}
+
+export type SimultaneousOrder = {
+  action: GameAction;
+  decision: "accept" | "reject";
+  reason: string;
+};
+
+export type SimultaneousOrderResult = {
+  actorCharacterId: number;
+  status: "accepted" | "rejected" | "pass";
+  reason: string;
+};
+
+export type SimultaneousGameTurnResult = GameTurnResult & {
+  orderResults: SimultaneousOrderResult[];
+};
+
+function advanceWorldTurn(snapshot: EngineSnapshot) {
   const next = structuredClone(snapshot);
   const resolvedEvents: GameTurnResult["resolvedEvents"] = [];
   next.turnNumber += 1;
@@ -712,14 +809,132 @@ export function simulateGameTurn(
     }
   }
 
-  const errors = validateGameTurn(next, turn);
-  if (errors.length > 0) {
-    throw new GameActionValidationError(errors);
+  return { next, resolvedEvents };
+}
+
+function markGroupedConflicts(
+  actions: GameAction[],
+  orderResults: SimultaneousOrderResult[],
+  groups: Map<string, number[]>,
+  message: (action: GameAction) => string,
+) {
+  for (const indexes of groups.values()) {
+    if (indexes.length < 2) continue;
+    for (const index of indexes) {
+      orderResults[index].status = "rejected";
+      orderResults[index].reason = message(actions[index]);
+    }
+  }
+}
+
+function applySimultaneousConflicts(
+  snapshot: EngineSnapshot,
+  orders: SimultaneousOrder[],
+  results: SimultaneousOrderResult[],
+) {
+  const groups = new Map<string, number[]>();
+  const add = (key: string, index: number) => {
+    const indexes = groups.get(key) ?? [];
+    indexes.push(index);
+    groups.set(key, indexes);
+  };
+  const accepted = orders.flatMap((order, index) =>
+    order.decision === "accept" && results[index].status !== "rejected"
+      ? [{ action: order.action, index }]
+      : [],
+  );
+
+  for (const { action, index } of accepted) {
+    add(`actor:${action.actorCharacterId}`, index);
+    if (action.type === "diplomacy_resolve") {
+      add(`diplomacy:${action.diplomacyRecordId}`, index);
+    } else if (action.type === "diplomacy_propose") {
+      const actorHouseId = characterHouse(snapshot, action.actorCharacterId);
+      const houses = [actorHouseId, action.targetHouseId].sort((a, b) => (a ?? 0) - (b ?? 0));
+      add(`diplomacy:${action.relationType}:${houses.join(":")}`, index);
+    } else if (action.type === "war_declare") {
+      const actorHouseId = characterHouse(snapshot, action.actorCharacterId);
+      const houses = [actorHouseId, action.targetHouseId].sort((a, b) => (a ?? 0) - (b ?? 0));
+      add(`war:${houses.join(":")}`, index);
+    } else if (action.type === "war_join") {
+      const actorHouseId = characterHouse(snapshot, action.actorCharacterId);
+      add(`war_join:${action.warId}:${actorHouseId}`, index);
+    } else if (action.type === "move") {
+      add(`move:${action.actorCharacterId}`, index);
+    }
   }
 
-  for (const action of turn.actions) {
-    validateAction(next, action, [], next);
+  markGroupedConflicts(orders.map((order) => order.action), results, groups, () =>
+    "This order conflicts with another simultaneous order; all orders in the conflict were rejected.",
+  );
+
+  const regionalMusterIndexes = new Map<number, number[]>();
+  for (const { action, index } of accepted) {
+    if (action.type !== "muster" || results[index].status === "rejected") continue;
+    const indexes = regionalMusterIndexes.get(action.regionId) ?? [];
+    indexes.push(index);
+    regionalMusterIndexes.set(action.regionId, indexes);
+  }
+  for (const [regionId, indexes] of regionalMusterIndexes) {
+    const capacity = snapshot.regionalEstimates
+      .filter((estimate) =>
+        estimate.regionId === regionId &&
+        estimate.forceType === "regional_levy" &&
+        estimate.maximumStrength !== null,
+      )
+      .reduce((maximum, estimate) => Math.max(maximum, estimate.maximumStrength ?? 0), 0);
+    const existing = snapshot.musterOrders
+      .filter((order) => order.regionId === regionId && order.status !== "cancelled")
+      .reduce((total, order) => total + order.forceSize, 0);
+    const proposed = indexes.reduce((total, index) => {
+      const action = orders[index].action;
+      return total + (action.type === "muster" ? action.forceSize : 0);
+    }, 0);
+    if (capacity > 0 && existing + proposed > capacity) {
+      for (const index of indexes) {
+        results[index].status = "rejected";
+        results[index].reason =
+          "The simultaneous muster orders exceed regional capacity; all orders in the conflict were rejected.";
+      }
+    }
+  }
+}
+
+export function simulateSimultaneousWorldTurn(
+  snapshot: EngineSnapshot,
+  orders: SimultaneousOrder[],
+): SimultaneousGameTurnResult {
+  const { next, resolvedEvents } = advanceWorldTurn(snapshot);
+  const orderResults = orders.map(({ action, decision, reason }) => ({
+    actorCharacterId: action.actorCharacterId,
+    status: action.type === "wait"
+      ? "pass" as const
+      : decision === "reject"
+        ? "rejected" as const
+        : "accepted" as const,
+    reason: action.type === "wait" ? reason : reason,
+  }));
+  orders.forEach(({ action, decision }, index) => {
+    if (decision !== "accept") return;
+    const isolated = structuredClone(next);
+    const errors: string[] = [];
+    validateAction(next, action, errors, isolated);
+    if (errors.length > 0) {
+      orderResults[index].status = "rejected";
+      orderResults[index].reason = errors.join(" ");
+    }
+  });
+
+  applySimultaneousConflicts(snapshot, orders, orderResults);
+
+  for (const [index, order] of orders.entries()) {
+    if (orderResults[index].status !== "accepted") continue;
+    const errors: string[] = [];
+    validateAction(next, order.action, errors, next);
+    if (errors.length > 0) {
+      throw new Error(`Simultaneous conflict validation was incomplete: ${errors.join(" ")}`);
+    }
   }
 
-  return { snapshot: next, resolvedEvents };
+  return { snapshot: next, resolvedEvents, orderResults };
 }

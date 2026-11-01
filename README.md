@@ -132,10 +132,13 @@ an individual step needs retrying.
 
 After the travel scripts, run
 [`supabase/gameplay-engine.sql`](./supabase/gameplay-engine.sql). It adds
-serialized, idempotent turn commits; seven-day turn progression; deterministic
-travel arrival and muster completion; and private gameplay-turn and muster
-order records. The migration grants its commit procedure only to
-`service_role`.
+the deterministic action-commit procedure, travel arrival and muster
+progression, and private gameplay-turn and muster-order records. Then run
+[`supabase/global-turn-cycle.sql`](./supabase/global-turn-cycle.sql). It adds
+the shared planning and resolution phases, one order per assigned player for
+each global turn, AI order storage for unassigned characters, and the atomic
+weekly resolution procedure. Run both after the world-state, opening-state,
+and travel migrations.
 
 The scripts create the workbook-backed route graph, linked route alternatives
 and legs, waypoint and source records, travel assumptions, and campaign
@@ -153,19 +156,17 @@ mandatory.
 Copy `.env.example` to `.env.local` if needed and set
 `SUPABASE_SERVICE_ROLE_KEY` from your Supabase project's API settings. This key
 grants privileged database access: keep it secret and use it only in
-server-side code. [`lib/game/events.ts`](./lib/game/events.ts) provides
+server-side code. Set `CRON_SECRET` to a strong random value for scheduled
+resolution. [`lib/game/events.ts`](./lib/game/events.ts) provides
 `appendGameEvent()`, `getGameEvents()`, `loadWorldContext()`, and
-`loadGroqGamePrompt(userId, playerRequest)`. The prompt helper reads the
-starting reference, event history, and connected
-Supabase state, then returns the system and user prompt messages using
-[`lib/ai/prompt-template.ts`](./lib/ai/prompt-template.ts). It includes the
-authenticated player's assigned character and marks roster characters with no
-user assignment as AI-controlled. Call it only from trusted server-side code
-and pass the authenticated user's ID. This prepares prompt content only; it
-does not create a Groq client or send a model request. New events automatically
-create foreign-keyed participant, location, knowledge, and structured
-state-change records; state-change targets must identify a character, house,
-location, war, or diplomacy record.
+`loadGroqGamePrompt(userId, playerRequest)`. Player prompts contain public
+context, the assigned character's own knowledge and history, and relevant
+travel routes and journey status. AI-controlled characters receive the same
+character-scoped context for their own decisions. Call these helpers only from
+trusted server-side code. New events automatically create foreign-keyed
+participant, location, knowledge, and structured state-change records;
+state-change targets must identify a character, house, location, war, or
+diplomacy record.
 
 `loadWorldContext()` combines the starting reference, chronological history,
 and connected current database records. It returns canonical and secret
@@ -179,7 +180,7 @@ secrets. Its realm overview uses public events and diplomacy records marked
 If the world-state migration was already run, rerun its latest version to add
 the public visibility fields used by the account overview.
 
-### Gameplay turns
+### Shared gameplay turns
 
 The authenticated, same-origin `POST /api/game/turn` endpoint accepts:
 
@@ -190,14 +191,36 @@ The authenticated, same-origin `POST /api/game/turn` endpoint accepts:
 }
 ```
 
-It uses Groq to return structured actions, then validates and simulates them
-server-side before calling the atomic Supabase commit procedure. The engine
-supports character travel on routes with available travel estimates, regional
-levy muster orders, private diplomacy proposals and responses, war declarations
-and joining an active war, and waiting. A successful turn advances seven
-in-world days while leaving the exact calendar date unknown. Travel and muster
-progress are recorded against that turn clock; arrival updates the character's
-location and emits an event.
+Each global turn has a 48-hour planning window. Every assigned player may
+submit exactly one primary order; an explicit wait counts as that order. Orders
+are stored without advancing the clock. When all players submit, or after the
+deadline, the resolver generates orders for unassigned characters and gives
+all player and AI orders together to the master adjudicator. Missing players
+become wait/pass orders. The engine independently validates simultaneous
+conflicts and commits accepted orders, travel/muster progress, and one
+seven-day clock advance atomically. It then opens the next planning window.
+The participant list is snapshotted when a planning window opens; newly
+assigned characters join the following window.
+
+The authenticated `GET /api/game/turn` endpoint reports the current phase,
+deadline, and only the signed-in player's order status and previous resolved
+status; it does not expose other players' orders or outcomes. The `POST`
+response likewise contains no other player's result.
+
+For Vercel plans that support five-minute Cron schedules,
+[`vercel.json`](./vercel.json) invokes the protected `GET /api/game/resolve`
+route every five minutes. Set `CRON_SECRET` in the deployment environment so
+Vercel sends the matching bearer token. Other hosting providers must configure
+an equivalent scheduled request with `Authorization: Bearer $CRON_SECRET`;
+automatic deadline passes occur only while that scheduler is enabled. NPC
+orders are persisted in small batches so timed-out resolution can resume
+without discarding earlier proposals.
+
+The engine supports character travel on routes with available travel
+estimates, regional levy muster orders, private diplomacy proposals and
+responses, war declarations and joining an active war, and waiting. Travel and
+muster progress advance once per global turn, not once per player request.
+Exact calendar dates remain unknown.
 
 Regional muster capacity is a gameplay use of the seeded regional potential
 estimates; it does not allocate or infer an opening army size for an individual
@@ -208,11 +231,11 @@ closed, restricted, blockaded, destroyed, and permission-gated legs are rejected
 
 The endpoint requires one assigned character, the Groq and Supabase server
 environment variables above, and all listed SQL migrations including
-`gameplay-engine.sql`. Each request needs a unique UUID; retries with the same
-ID return the original result. Concurrent turns use a world revision check, so
-a stale action is rejected rather than committed against a different state.
-Events and diplomacy proposals remain private by default; the endpoint returns
-the narrative only to the authenticated requester.
+`gameplay-engine.sql` and `global-turn-cycle.sql`. Each order needs a unique
+UUID; retries with the same ID return the original status. Concurrent
+submissions are serialized against one planning snapshot and stale world
+revisions are rejected. Events and diplomacy proposals remain private by
+default.
 
 Run the focused deterministic engine tests with `npm run test:game`.
 

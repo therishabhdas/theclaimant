@@ -1,7 +1,12 @@
 import "server-only";
 
 import Groq from "groq-sdk";
-import { parseStructuredGameTurn, type StructuredGameTurn } from "../game/engine";
+import {
+  parseStructuredGameTurn,
+  parseStructuredWorldTurnResolution,
+  type StructuredGameTurn,
+  type StructuredWorldTurnResolution,
+} from "../game/engine";
 import type { GroqGamePrompt } from "./prompt-template";
 
 export const GROQ_MODEL = "openai/gpt-oss-120b";
@@ -66,4 +71,34 @@ export async function inferStructuredGameTurn(
   }
 
   return parseStructuredGameTurn(generated);
+}
+
+export async function inferStructuredWorldTurnResolution(
+  prompt: GroqGamePrompt,
+  expectedActorIds: number[],
+): Promise<StructuredWorldTurnResolution> {
+  const completion = await createGroqClient().chat.completions.create({
+    model: GROQ_MODEL,
+    temperature: 0.1,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: prompt.system },
+      { role: "user", content: prompt.user },
+    ],
+  });
+  const content = completion.choices[0]?.message.content;
+  if (!content) {
+    throw new Error("Groq returned an empty world-turn resolution.");
+  }
+
+  let generated: unknown;
+  try {
+    generated = JSON.parse(content);
+  } catch (error) {
+    throw new Error("Groq returned invalid JSON for the world-turn resolution.", {
+      cause: error,
+    });
+  }
+
+  return parseStructuredWorldTurnResolution(generated, expectedActorIds);
 }

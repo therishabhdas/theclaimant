@@ -2,9 +2,14 @@ import { cookies } from "next/headers";
 import { createClient } from "../../../../lib/supabase/server";
 import { GameActionValidationError } from "../../../../lib/game/engine";
 import {
+  GameOrderAlreadySubmittedError,
+  GamePlanningClosedError,
   StaleGameStateError,
+  getPlayerTurnStatus,
   processPlayerTurn,
 } from "../../../../lib/game/turn-service";
+
+export const maxDuration = 300;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -69,11 +74,11 @@ export async function POST(request: Request) {
       playerRequest: body.playerRequest,
     });
     return Response.json({
-      turnId: result.commit.turnId,
-      turnNumber: result.commit.turnNumber,
-      revision: result.commit.revision,
-      eventId: result.commit.eventId,
-      narration: result.commit.narration,
+      turnNumber: result.turnNumber,
+      revision: result.revision,
+      resolutionStatus: result.resolutionStatus,
+      deadlineAt: result.deadlineAt,
+      idempotent: result.idempotent,
     }, {
       headers: { "Cache-Control": "no-store" },
     });
@@ -86,6 +91,12 @@ export async function POST(request: Request) {
     if (error instanceof StaleGameStateError) {
       return Response.json({ error: error.message }, { status: 409 });
     }
+    if (error instanceof GamePlanningClosedError) {
+      return Response.json({ error: error.message }, { status: 409 });
+    }
+    if (error instanceof GameOrderAlreadySubmittedError) {
+      return Response.json({ error: error.message }, { status: 409 });
+    }
     console.error(
       "Unable to process the gameplay turn:",
       error instanceof Error ? error.message : "Unknown error",
@@ -93,5 +104,27 @@ export async function POST(request: Request) {
     return Response.json({ error: "The game turn could not be processed. Please try again." }, {
       status: 500,
     });
+  }
+}
+
+export async function GET(request: Request) {
+  if (!isSameOrigin(request)) {
+    return Response.json({ error: "The request origin could not be verified." }, { status: 403 });
+  }
+  const supabase = createClient(await cookies());
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) {
+    if (error) console.error("Unable to authenticate a gameplay status request:", error.message);
+    return Response.json({ error: "Sign in before checking game-turn status." }, { status: 401 });
+  }
+  try {
+    const status = await getPlayerTurnStatus(user.id);
+    return Response.json(status, { headers: { "Cache-Control": "no-store" } });
+  } catch (statusError) {
+    console.error(
+      "Unable to load gameplay turn status:",
+      statusError instanceof Error ? statusError.message : "Unknown error",
+    );
+    return Response.json({ error: "The game-turn status could not be loaded." }, { status: 500 });
   }
 }

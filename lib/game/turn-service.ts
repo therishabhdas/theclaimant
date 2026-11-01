@@ -1,10 +1,15 @@
 import "server-only";
 
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { inferStructuredGameTurn } from "../ai/groq";
+import {
+  inferStructuredGameTurn,
+  inferStructuredWorldTurnResolution,
+} from "../ai/groq";
+import type { GameAction } from "./engine";
 import {
   GameActionValidationError,
-  simulateGameTurn,
+  parseStructuredGameTurn,
+  simulateSimultaneousWorldTurn,
   type DiplomacyRelationType,
   type EngineDiplomacyRecord,
   type EngineJourney,
@@ -12,9 +17,12 @@ import {
   type EngineRoute,
   type EngineSnapshot,
   type EngineWar,
-  type StructuredGameTurn,
 } from "./engine";
-import { loadGroqGamePrompt } from "./events";
+import {
+  loadGroqCharacterPrompts,
+  loadGroqGamePrompt,
+  loadGroqWorldTurnResolutionPrompt,
+} from "./events";
 
 type DatabaseRow = Record<string, unknown>;
 type DatabaseResponse = {
@@ -23,17 +31,31 @@ type DatabaseResponse = {
 };
 
 type TurnCommit = {
-  turnId: number;
   turnNumber: number;
   revision: number;
-  eventId: number;
-  narration: string;
+  resolutionStatus: string;
+  deadlineAt: string;
+  idempotent: boolean;
 };
 
 export class StaleGameStateError extends Error {
   constructor() {
     super("The world changed while this turn was being processed. Please submit it again.");
     this.name = "StaleGameStateError";
+  }
+}
+
+export class GamePlanningClosedError extends Error {
+  constructor(message = "The planning window for this world turn is closed.") {
+    super(message);
+    this.name = "GamePlanningClosedError";
+  }
+}
+
+export class GameOrderAlreadySubmittedError extends Error {
+  constructor(message = "An order has already been submitted for this world turn.") {
+    super(message);
+    this.name = "GameOrderAlreadySubmittedError";
   }
 }
 
@@ -102,16 +124,18 @@ function nullableBooleanField(row: DatabaseRow, key: string, context: string) {
 }
 
 async function loadEngineSnapshot(
-  userId: string,
+  userId: string | null,
   client: ReturnType<typeof getAdminClient>,
-): Promise<{ snapshot: EngineSnapshot; characterId: number }> {
+): Promise<{ snapshot: EngineSnapshot; characterId: number | null }> {
   const [assignmentRows, stateRows, characterRows, assignments, houses, routeRows,
     routeLegRows, edgeRows, journeyRows, participantRows, estimateRows, ruleRows, musterRows, diplomacyRows,
     warRows, warParticipantRows] = await Promise.all([
-    readRows(
-      client.from("user_character_assignments").select("character_id").eq("user_id", userId),
-      "the player's character assignment",
-    ),
+    userId === null
+      ? Promise.resolve([])
+      : readRows(
+          client.from("user_character_assignments").select("character_id").eq("user_id", userId),
+          "the player's character assignment",
+        ),
     readRows(
       client.from("world_state").select("turn_number, elapsed_days, gameplay_revision").eq("id", 1),
       "the current world state",
@@ -183,13 +207,15 @@ async function loadEngineSnapshot(
     ),
   ]);
 
-  if (assignmentRows.length !== 1) {
+  if (userId !== null && assignmentRows.length !== 1) {
     throw new Error("The authenticated player must have exactly one assigned character.");
   }
   if (stateRows.length !== 1) {
     throw new Error("The world state record has not been initialized.");
   }
-  const characterId = numberField(assignmentRows[0], "character_id", "assignment");
+  const characterId = assignmentRows.length > 0
+    ? numberField(assignmentRows[0], "character_id", "assignment")
+    : null;
   const assignmentByCharacter = new Map<number, boolean>(
     assignments.map((assignment) => [
       numberField(assignment, "character_id", "assignment"),
@@ -211,7 +237,10 @@ async function loadEngineSnapshot(
           : "ai" as const,
     };
   });
-  if (!characters.some((character) => character.id === characterId)) {
+  if (
+    characterId !== null &&
+    !characters.some((character) => character.id === characterId)
+  ) {
     throw new Error("The player's assigned character is missing from the roster.");
   }
 
@@ -394,92 +423,420 @@ async function loadEngineSnapshot(
   return { snapshot, characterId };
 }
 
-function readTurnCommit(value: unknown): TurnCommit {
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    Array.isArray(value)
-  ) {
-    throw new Error("The database returned an invalid turn result.");
+function objectField(value: unknown, context: string): DatabaseRow {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`The database returned an invalid ${context}.`);
   }
-  const row = value as Record<string, unknown>;
-  if (
-    typeof row.turnId !== "number" ||
-    typeof row.turnNumber !== "number" ||
-    typeof row.revision !== "number" ||
-    typeof row.eventId !== "number" ||
-    typeof row.narration !== "string"
-  ) {
-    throw new Error("The database returned an incomplete turn result.");
+  return value as DatabaseRow;
+}
+
+function rpcNumber(row: DatabaseRow, key: string, context: string) {
+  return numberField(row, key, context);
+}
+
+function rpcString(row: DatabaseRow, key: string, context: string) {
+  return stringField(row, key, context);
+}
+
+function parseStoredAction(value: unknown, actorId: number): GameAction {
+  const parsed = parseStructuredGameTurn({
+    narration: "Stored order.",
+    eventTitle: "Stored order",
+    eventType: "other",
+    eventSummary: "Stored order.",
+    actions: value,
+  });
+  if (parsed.actions.length !== 1 || parsed.actions[0].actorCharacterId !== actorId) {
+    throw new Error(`The stored order for character ${actorId} is invalid.`);
   }
-  return {
-    turnId: row.turnId,
-    turnNumber: row.turnNumber,
-    revision: row.revision,
-    eventId: row.eventId,
-    narration: row.narration,
-  };
+  return parsed.actions[0];
+}
+
+function raiseRpcError(message: string, context: string): never {
+  if (message.includes("GAME_STALE_STATE")) throw new StaleGameStateError();
+  if (message.includes("GAME_DEADLINE") || message.includes("GAME_TURN_CLOSED")) {
+    throw new GamePlanningClosedError();
+  }
+  if (message.includes("GAME_ALREADY_SUBMITTED")) {
+    throw new GameOrderAlreadySubmittedError();
+  }
+  if (message.includes("Request ID was already used")) {
+    throw new GameOrderAlreadySubmittedError(
+      "The request ID was already used for a different order.",
+    );
+  }
+  if (message.includes("GAME_INVALID_ACTION")) {
+    throw new GameActionValidationError([message.split(": ").slice(1).join(": ")]);
+  }
+  throw new Error(`${context}: ${message}`);
+}
+
+async function inferNpcOrders(
+  client: ReturnType<typeof getAdminClient>,
+  turnNumber: number,
+  npcRows: DatabaseRow[],
+) {
+  const pending = npcRows.filter((row) => row.action_data === null).slice(0, 4);
+  const storedOrders = new Map<number, GameAction[]>();
+  for (const row of npcRows) {
+    const actorId = numberField(row, "character_id", "NPC turn order");
+    if (row.action_data !== null) {
+      storedOrders.set(actorId, [parseStoredAction(row.action_data, actorId)]);
+    }
+  }
+  if (pending.length === 0) return storedOrders;
+
+  const prompts = await loadGroqCharacterPrompts(
+    pending.map((row) => ({
+      actorCharacterId: numberField(row, "character_id", "NPC turn order"),
+      playerRequest:
+        `Choose exactly one plausible primary order for this AI-controlled character ` +
+        `during shared world turn ${turnNumber}. Use only the character's own known ` +
+        `facts and current situation. Do not invent a successful outcome.`,
+    })),
+  );
+  const pendingActors = pending.map((row) => numberField(row, "character_id", "NPC turn order"));
+  const inferred = new Map<number, GameAction[]>();
+  const concurrency = 4;
+  for (let offset = 0; offset < pendingActors.length; offset += concurrency) {
+    const batch = pendingActors.slice(offset, offset + concurrency);
+    const results = await Promise.all(batch.map(async (actorId) => {
+      const prompt = prompts.get(actorId);
+      if (!prompt) throw new Error(`The AI prompt for character ${actorId} was not loaded.`);
+      const plan = await inferStructuredGameTurn(prompt);
+      if (plan.actions.length !== 1 || plan.actions[0].actorCharacterId !== actorId) {
+        throw new GameActionValidationError([
+          `The AI did not return exactly one order for character ${actorId}.`,
+        ]);
+      }
+      return [actorId, plan.actions] as const;
+    }));
+    for (const [actorId, actions] of results) inferred.set(actorId, actions);
+  }
+
+  const savedOrders = [...inferred.entries()].map(([actorCharacterId, actions]) => ({
+    actorCharacterId,
+    actionData: actions,
+  }));
+  const { error } = await client.rpc("save_npc_game_orders", {
+    p_turn_number: turnNumber,
+    p_orders: savedOrders,
+  });
+  if (error) raiseRpcError(error.message, "Unable to save AI orders");
+
+  for (const [actorId, actions] of inferred) storedOrders.set(actorId, actions);
+  return storedOrders;
+}
+
+export async function resolveGlobalWorldTurn(): Promise<{
+  resolved: boolean;
+  turnNumber: number;
+}> {
+  const client = getAdminClient();
+  const { data: claimData, error: claimError } = await client.rpc(
+    "claim_game_turn_resolution",
+  );
+  if (claimError) raiseRpcError(claimError.message, "Unable to claim world-turn resolution");
+  const claim = objectField(claimData, "world-turn claim");
+  const turnNumber = rpcNumber(claim, "turnNumber", "world-turn claim");
+  if (claim.claimed !== true) return { resolved: false, turnNumber };
+  const revision = rpcNumber(claim, "revision", "world-turn claim");
+
+  try {
+    const { snapshot } = await loadEngineSnapshot(null, client);
+    if (snapshot.revision !== revision || snapshot.turnNumber + 1 !== turnNumber) {
+      throw new StaleGameStateError();
+    }
+    const [participantRows, playerOrderRows, npcRows] = await Promise.all([
+      readRows(client.from("gameplay_turn_participants")
+        .select("user_id, character_id")
+        .eq("world_state_id", 1)
+        .eq("turn_number", turnNumber), "world-turn participants"),
+      readRows(client.from("gameplay_turn_orders")
+        .select("user_id, character_id, action_data, player_request, resolution_status")
+        .eq("world_state_id", 1)
+        .eq("turn_number", turnNumber), "player world-turn orders"),
+      readRows(client.from("gameplay_npc_orders")
+        .select("character_id, action_data, resolution_status")
+        .eq("world_state_id", 1)
+        .eq("turn_number", turnNumber), "AI world-turn orders"),
+    ]);
+    if (participantRows.length === 0) {
+      throw new Error("The world turn cannot resolve without a player participant.");
+    }
+
+    const playerOrders = new Map(
+      playerOrderRows.map((row) => [
+        numberField(row, "character_id", "player world-turn order"),
+        row,
+      ] as const),
+    );
+    const allOrders: Array<{
+      actorCharacterId: number;
+      controller: "player" | "ai";
+      action: GameAction;
+    }> = [];
+    for (const participant of participantRows) {
+      const actorId = numberField(participant, "character_id", "world-turn participant");
+      const storedOrder = playerOrders.get(actorId);
+      allOrders.push({
+        actorCharacterId: actorId,
+        controller: "player",
+        action: storedOrder
+          ? parseStoredAction(storedOrder.action_data, actorId)
+          : {
+              type: "wait",
+              actorCharacterId: actorId,
+              reason: "No order was submitted before the planning deadline.",
+            },
+      });
+    }
+
+    const npcOrders = await inferNpcOrders(client, turnNumber, npcRows);
+    if (npcOrders.size < npcRows.length) {
+      return { resolved: false, turnNumber };
+    }
+    for (const [actorId, actions] of npcOrders) {
+      allOrders.push({
+        actorCharacterId: actorId,
+        controller: "ai",
+        action: actions[0],
+      });
+    }
+
+    const prompt = await loadGroqWorldTurnResolutionPrompt({
+      worldTurn: turnNumber,
+      orders: allOrders,
+    });
+    const resolution = await inferStructuredWorldTurnResolution(
+      prompt,
+      allOrders.map((order) => order.actorCharacterId),
+    );
+    const decisionByActor = new Map(
+      resolution.decisions.map((decision) => [decision.actorCharacterId, decision]),
+    );
+    const resolutionSnapshot = structuredClone(snapshot);
+    for (const order of allOrders) {
+      const actor = resolutionSnapshot.characters.find(
+        (character) => character.id === order.actorCharacterId,
+      );
+      if (!actor) {
+        throw new Error(`Character ${order.actorCharacterId} is missing from the world snapshot.`);
+      }
+      actor.controller = order.controller;
+    }
+    const simulation = simulateSimultaneousWorldTurn(
+      resolutionSnapshot,
+      allOrders.map((order) => {
+        const decision = decisionByActor.get(order.actorCharacterId);
+        if (!decision) {
+          throw new Error(`The master resolution omitted character ${order.actorCharacterId}.`);
+        }
+        return {
+          action: order.action,
+          decision: decision.decision,
+          reason: decision.reason,
+        };
+      }),
+    );
+    const validatedDecisions = simulation.orderResults.map((result) => ({
+      actorCharacterId: result.actorCharacterId,
+      decision: result.status === "rejected" ? "reject" : "accept",
+      reason: result.reason,
+    }));
+    const { data: resolutionData, error: resolutionError } = await client.rpc(
+      "resolve_game_turn",
+      {
+        p_turn_number: turnNumber,
+        p_expected_revision: revision,
+        p_decisions: validatedDecisions,
+        p_event_title: resolution.eventTitle,
+        p_event_type: resolution.eventType,
+        p_canonical_summary: resolution.canonicalSummary,
+      },
+    );
+    if (resolutionError) {
+      raiseRpcError(resolutionError.message, "Unable to commit the resolved world turn");
+    }
+    const committed = objectField(resolutionData, "resolved world turn");
+    return {
+      resolved: committed.status === "resolved",
+      turnNumber: rpcNumber(committed, "resolvedTurn", "resolved world turn"),
+    };
+  } catch (error) {
+    const { error: releaseError } = await client.rpc("release_game_turn_resolution", {
+      p_turn_number: turnNumber,
+    });
+    if (releaseError) {
+      throw new Error(
+        `World-turn resolution failed and its lease could not be released: ${releaseError.message}`,
+        { cause: error },
+      );
+    }
+    throw error;
+  }
 }
 
 export async function processPlayerTurn(input: {
   userId: string;
   requestId: string;
   playerRequest: string;
-}): Promise<{ commit: TurnCommit; plan: StructuredGameTurn }> {
+}): Promise<TurnCommit> {
   const client = getAdminClient();
   const existingRows = await readRows(
-    client.from("gameplay_turns")
-      .select("id, turn_number, gameplay_revision, event_id, narration")
+    client.from("gameplay_turn_orders")
+      .select("character_id, turn_number, resolution_status, player_request")
       .eq("request_id", input.requestId)
       .eq("user_id", input.userId),
-    "the prior turn request",
+    "the prior order request",
   );
   if (existingRows[0]) {
-    const existing = existingRows[0];
+    if (stringField(existingRows[0], "player_request", "player order") !== input.playerRequest) {
+      throw new GameOrderAlreadySubmittedError(
+        "The request ID was already used for a different order.",
+      );
+    }
+    const [orderRows, stateRows] = await Promise.all([
+      readRows(client.from("gameplay_turn_orders")
+        .select("resolution_status")
+        .eq("request_id", input.requestId)
+        .eq("user_id", input.userId), "the prior order status"),
+      readRows(client.from("world_state")
+        .select("gameplay_revision, planning_deadline_at")
+        .eq("id", 1), "the current world state"),
+    ]);
+    if (orderRows.length !== 1 || stateRows.length !== 1) {
+      throw new Error("The prior order or current world state is missing.");
+    }
     return {
-      commit: {
-        turnId: numberField(existing, "id", "gameplay turn"),
-        turnNumber: numberField(existing, "turn_number", "gameplay turn"),
-        revision: numberField(existing, "gameplay_revision", "gameplay turn"),
-        eventId: numberField(existing, "event_id", "gameplay turn"),
-        narration: stringField(existing, "narration", "gameplay turn"),
-      },
-      plan: {
-        narration: stringField(existing, "narration", "gameplay turn"),
-        eventTitle: "Turn already processed",
-        eventType: "decision",
-        eventSummary: "An idempotent request returned its existing result.",
-        actions: [],
-      },
+      turnNumber: numberField(existingRows[0], "turn_number", "player order"),
+      revision: numberField(stateRows[0], "gameplay_revision", "world state"),
+      resolutionStatus: stringField(orderRows[0], "resolution_status", "player order"),
+      deadlineAt: stringField(stateRows[0], "planning_deadline_at", "world state"),
+      idempotent: true,
     };
   }
 
   const { snapshot, characterId } = await loadEngineSnapshot(input.userId, client);
+  if (characterId === null) {
+    throw new Error("The authenticated player has no assigned character.");
+  }
   const prompt = await loadGroqGamePrompt(input.userId, input.playerRequest);
   const plan = await inferStructuredGameTurn(prompt);
-  simulateGameTurn(snapshot, plan);
+  if (plan.actions.length !== 1 || plan.actions[0].actorCharacterId !== characterId) {
+    throw new GameActionValidationError([
+      "The AI must return exactly one primary order for the player's assigned character.",
+    ]);
+  }
+  const simulation = simulateSimultaneousWorldTurn(snapshot, [{
+    action: plan.actions[0],
+    decision: "accept",
+    reason: "Proposed player order.",
+  }]);
+  if (simulation.orderResults[0].status === "rejected") {
+    throw new GameActionValidationError([simulation.orderResults[0].reason]);
+  }
 
-  const { data, error } = await client.rpc("commit_game_turn", {
+  const { data, error } = await client.rpc("submit_game_order", {
     p_user_id: input.userId,
     p_character_id: characterId,
     p_request_id: input.requestId,
     p_expected_revision: snapshot.revision,
     p_player_request: input.playerRequest,
-    p_narration: plan.narration,
-    p_event_title: plan.eventTitle,
-    p_event_type: plan.eventType,
-    p_event_summary: plan.eventSummary,
-    p_actions: plan.actions,
+    p_action_data: plan.actions,
   });
-  if (error) {
-    if (error.message.includes("GAME_STALE_STATE")) {
-      throw new StaleGameStateError();
+  if (error) raiseRpcError(error.message, "Unable to submit the world-turn order");
+  const result = objectField(data, "submitted player order");
+  const submission: TurnCommit = {
+    turnNumber: rpcNumber(result, "turnNumber", "submitted player order"),
+    revision: snapshot.revision,
+    resolutionStatus: rpcString(result, "resolutionStatus", "submitted player order"),
+    deadlineAt: rpcString(result, "deadlineAt", "submitted player order"),
+    idempotent: result.idempotent === true,
+  };
+  if (
+    typeof result.submittedCount === "number" &&
+    typeof result.requiredCount === "number" &&
+    result.submittedCount === result.requiredCount
+  ) {
+    const resolution = await resolveGlobalWorldTurn();
+    if (resolution.resolved) {
+      const statusRows = await readRows(client.from("gameplay_turn_orders")
+        .select("resolution_status")
+        .eq("request_id", input.requestId)
+        .eq("user_id", input.userId), "the resolved player order");
+      if (statusRows.length !== 1) throw new Error("The resolved player order is missing.");
+      submission.resolutionStatus = stringField(
+        statusRows[0],
+        "resolution_status",
+        "resolved player order",
+      );
     }
-    if (error.message.includes("GAME_INVALID_ACTION")) {
-      throw new GameActionValidationError([error.message.split(": ").slice(1).join(": ")]);
-    }
-    throw new Error(`Unable to commit the game turn: ${error.message}`);
   }
+  return submission;
+}
 
-  return { commit: readTurnCommit(data), plan };
+export async function getPlayerTurnStatus(userId: string): Promise<{
+  turnNumber: number;
+  phase: string;
+  deadlineAt: string;
+  participating: boolean;
+  ownOrderStatus: string;
+  previousTurnStatus: string | null;
+}> {
+  const client = getAdminClient();
+  const [assignmentRows, stateRows] = await Promise.all([
+    readRows(client.from("user_character_assignments")
+      .select("character_id")
+      .eq("user_id", userId), "the player's character assignment"),
+    readRows(client.from("world_state")
+      .select("turn_number, turn_phase, planning_deadline_at")
+      .eq("id", 1), "the current world state"),
+  ]);
+  if (assignmentRows.length !== 1 || stateRows.length !== 1) {
+    throw new Error("The player assignment or world state is not initialized.");
+  }
+  const characterId = numberField(assignmentRows[0], "character_id", "assignment");
+  const world = stateRows[0];
+  const completedTurn = numberField(world, "turn_number", "world state");
+  const turnNumber = completedTurn + 1;
+  const [participantRows, currentRows, previousRows] = await Promise.all([
+    readRows(client.from("gameplay_turn_participants")
+      .select("character_id")
+      .eq("world_state_id", 1)
+      .eq("turn_number", turnNumber)
+      .eq("user_id", userId)
+      .eq("character_id", characterId), "current-turn participation"),
+    readRows(client.from("gameplay_turn_orders")
+      .select("resolution_status")
+      .eq("world_state_id", 1)
+      .eq("turn_number", turnNumber)
+      .eq("user_id", userId), "the player's current order"),
+    completedTurn > 0
+      ? readRows(client.from("gameplay_turn_orders")
+          .select("resolution_status")
+          .eq("world_state_id", 1)
+          .eq("turn_number", completedTurn)
+          .eq("user_id", userId), "the player's previous order")
+      : Promise.resolve([]),
+  ]);
+  const participating = participantRows.length === 1;
+  const phase = stringField(world, "turn_phase", "world state");
+  if (phase !== "planning" && phase !== "resolving") {
+    throw new Error("The world state has an unsupported turn phase.");
+  }
+  return {
+    turnNumber,
+    phase,
+    deadlineAt: stringField(world, "planning_deadline_at", "world state"),
+    participating,
+    ownOrderStatus: !participating
+      ? "not_participating"
+      : currentRows.length > 0
+        ? stringField(currentRows[0], "resolution_status", "player order")
+        : "not_submitted",
+    previousTurnStatus: previousRows.length > 0
+      ? stringField(previousRows[0], "resolution_status", "previous player order")
+      : null,
+  };
 }

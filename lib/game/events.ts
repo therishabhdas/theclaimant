@@ -3,7 +3,13 @@ import "server-only";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { buildGroqGamePrompt } from "../ai/prompt-template";
+import {
+  buildWorldTurnResolutionPrompt,
+} from "../ai/prompt-template";
+import {
+  loadGroqCharacterPrompts,
+  loadGroqGamePrompt as loadScopedGroqGamePrompt,
+} from "./actor-prompts";
 
 export const GAME_EVENT_TYPES = [
   "political",
@@ -252,6 +258,7 @@ export async function loadWorldContext(playerUserId?: string): Promise<string> {
     loyalties,
     secrets,
     secretKnowledge,
+    characterKnowledge,
     claims,
     wars,
     warParticipants,
@@ -289,6 +296,10 @@ export async function loadWorldContext(playerUserId?: string): Promise<string> {
     readRows(
       supabase.from("character_secret_knowledge").select("*"),
       "character secret knowledge",
+    ),
+    readRows(
+      supabase.from("playable_character_knowledge").select("*"),
+      "playable character knowledge",
     ),
     readRows(supabase.from("political_claims").select("*"), "political claims"),
     readRows(supabase.from("world_wars").select("*"), "wars"),
@@ -331,6 +342,7 @@ export async function loadWorldContext(playerUserId?: string): Promise<string> {
     loyalties,
     secrets,
     secretKnowledge,
+    characterKnowledge,
     claims,
     wars,
     warParticipants,
@@ -346,263 +358,23 @@ export async function loadWorldContext(playerUserId?: string): Promise<string> {
   });
 }
 
-type CampaignRow = Record<string, unknown>;
-
-function rowsForCharacter(rows: CampaignRow[], characterId: number) {
-  return rows.filter((row) => row.character_id === characterId);
-}
-
-function formatRows(value: unknown) {
-  return JSON.stringify(value, null, 2);
-}
-
 export async function loadGroqGamePrompt(
   playerUserId: string,
   playerRequest: string,
 ) {
-  if (!playerUserId.trim()) {
-    throw new Error("A player user ID is required to build the game prompt.");
-  }
+  return loadScopedGroqGamePrompt(playerUserId, playerRequest);
+}
 
-  if (!playerRequest.trim()) {
-    throw new Error("A player request is required to build the game prompt.");
-  }
-
-  const supabase = getAdminClient();
-  const [
-    startingReference,
-    events,
-    worldState,
-    regions,
-    houses,
-    locations,
-    characters,
-    assignments,
-    playerAssignments,
-    traits,
-    ambitions,
-    loyalties,
-    secrets,
-    secretKnowledge,
-    claims,
-    wars,
-    warParticipants,
-    regionalMilitaryEstimates,
-    militaryMusterRules,
-    worldFinancialRecords,
-    diplomacy,
-  ] = await Promise.all([
-    readFile(join(process.cwd(), "theclaimant_starting_reference.txt"), "utf8"),
-    getGameEvents(),
-    readRows(supabase.from("world_state").select("*"), "world state"),
-    readRows(supabase.from("world_regions").select("*"), "world regions"),
-    readRows(supabase.from("houses").select("*"), "houses"),
-    readRows(supabase.from("playable_locations").select("*"), "locations"),
-    readRows(supabase.from("playable_characters").select("*"), "characters"),
-    readRows(
-      supabase
-        .from("user_character_assignments")
-        .select("user_id, character_id"),
-      "character assignments",
-    ),
-    readRows(
-      supabase
-        .from("user_character_assignments")
-        .select("*")
-        .eq("user_id", playerUserId),
-      "the requested player's assignment",
-    ),
-    readRows(supabase.from("character_traits").select("*"), "character traits"),
-    readRows(
-      supabase.from("character_ambitions").select("*"),
-      "character ambitions",
-    ),
-    readRows(
-      supabase.from("character_loyalties").select("*"),
-      "character loyalties",
-    ),
-    readRows(supabase.from("character_secrets").select("*"), "character secrets"),
-    readRows(
-      supabase.from("character_secret_knowledge").select("*"),
-      "character secret knowledge",
-    ),
-    readRows(supabase.from("political_claims").select("*"), "political claims"),
-    readRows(supabase.from("world_wars").select("*"), "wars"),
-    readRows(
-      supabase.from("war_participants").select("*"),
-      "war participants",
-    ),
-    readRows(
-      supabase.from("regional_military_estimates").select("*"),
-      "regional military estimates",
-    ),
-    readRows(
-      supabase.from("military_muster_rules").select("*"),
-      "military muster rules",
-    ),
-    readRows(
-      supabase.from("world_financial_records").select("*"),
-      "world financial records",
-    ),
-    readRows(
-      supabase.from("diplomacy_records").select("*"),
-      "diplomacy records",
-    ),
-  ]);
-
-  const characterRows = characters as CampaignRow[];
-  const locationRows = locations as CampaignRow[];
-  const houseRows = houses as CampaignRow[];
-  const regionRows = regions as CampaignRow[];
-  const assignmentRows = assignments as CampaignRow[];
-  const playerAssignmentRows = playerAssignments as CampaignRow[];
-
-  if (playerAssignmentRows.length > 1) {
-    throw new Error(
-      "The requested player has multiple character assignments; expected one current character.",
-    );
-  }
-
-  const playerAssignment = playerAssignmentRows[0] ?? null;
-  const playerCharacterId =
-    typeof playerAssignment?.character_id === "number"
-      ? playerAssignment.character_id
-      : null;
-  const playerCharacter = playerCharacterId === null
-    ? null
-    : characterRows.find((character) => character.id === playerCharacterId) ?? null;
-
-  if (playerCharacterId !== null && !playerCharacter) {
-    throw new Error(
-      "The requested player's assigned character is missing from the character catalogue.",
-    );
-  }
-
-  const assignedCharacterIds = new Set(
-    assignmentRows
-      .map((assignment) => assignment.character_id)
-      .filter((id): id is number => typeof id === "number"),
-  );
-  const houseById = new Map(
-    houseRows.map((house) => [house.id, house.name]),
-  );
-  const regionById = new Map(
-    regionRows.map((region) => [region.id, region.name]),
-  );
-  const locationById = new Map(
-    locationRows.map((location) => [location.id, location]),
-  );
-  const withCurrentPlace = (character: CampaignRow) => ({
-    ...character,
-    currentHouseName: houseById.get(character.current_house_id) ?? null,
-    startingHouseName: houseById.get(character.starting_house_id) ?? null,
-    currentRegionName: regionById.get(character.world_region_id) ?? null,
-    currentLocation: locationById.get(character.current_location_id) ?? null,
-  });
-  const aiCharacters = characterRows
-    .filter((character) => !assignedCharacterIds.has(character.id as number))
-    .map((character) => {
-      const characterId = character.id as number;
-      const knowledge = rowsForCharacter(
-        secretKnowledge as CampaignRow[],
-        characterId,
-      ).filter((entry) =>
-        ["knows", "suspects", "learned"].includes(
-          String(entry.knowledge_status),
-        ),
-      );
-      const characterSecrets = knowledge.map((entry) => {
-        const secret = (secrets as CampaignRow[]).find(
-          (candidate) => candidate.id === entry.secret_id,
-        );
-        return {
-          knowledgeStatus: entry.knowledge_status,
-          details: entry.details,
-          secret: secret
-            ? {
-                canonicalSummary: secret.canonical_summary,
-                publicSummary: secret.public_summary,
-              }
-            : null,
-        };
-      });
-
-      return {
-        character: withCurrentPlace(character),
-        traits: rowsForCharacter(traits as CampaignRow[], characterId),
-        ambitions: rowsForCharacter(ambitions as CampaignRow[], characterId),
-        loyalties: rowsForCharacter(loyalties as CampaignRow[], characterId),
-        claims: (claims as CampaignRow[]).filter(
-          (claim) => claim.claimant_character_id === characterId,
-        ),
-        knownOrSuspectedSecrets: characterSecrets,
-      };
-    });
-
-  const playerCharacterContext = playerCharacter
-    ? {
-        character: withCurrentPlace(playerCharacter),
-        assignment: {
-          ...playerAssignment,
-          currentLocation: locationById.get(
-            playerAssignment?.current_location_id,
-          ) ?? null,
-        },
-        traits: rowsForCharacter(
-          traits as CampaignRow[],
-          playerCharacterId as number,
-        ),
-        ambitions: rowsForCharacter(
-          ambitions as CampaignRow[],
-          playerCharacterId as number,
-        ),
-        loyalties: rowsForCharacter(
-          loyalties as CampaignRow[],
-          playerCharacterId as number,
-        ),
-        claims: (claims as CampaignRow[]).filter(
-          (claim) => claim.claimant_character_id === playerCharacterId,
-        ),
-        knownOrSuspectedSecrets: (secretKnowledge as CampaignRow[])
-          .filter((entry) =>
-            entry.character_id === playerCharacterId
-            && ["knows", "suspects", "learned"].includes(
-              String(entry.knowledge_status),
-            ),
-          )
-          .map((entry) => ({
-            knowledgeStatus: entry.knowledge_status,
-            details: entry.details,
-            secret: (secrets as CampaignRow[]).find(
-              (candidate) => candidate.id === entry.secret_id,
-            ) ?? null,
-          })),
-      }
-    : {
-        status: "No character is currently assigned to this player account.",
-      };
-
-  return buildGroqGamePrompt({
-    startingReference,
-    currentWorldState: formatRows(worldState),
-    currentRealmSituation: formatRows(regions),
-    eventHistory: formatRows(events),
-    characterAndLocationStatus: formatRows({
-      characters: characterRows.map(withCurrentPlace),
-      locations: locationRows,
-    }),
-    housesAndDiplomacy: formatRows({
-      houses,
-      wars,
-      warParticipants,
-      regionalMilitaryEstimates,
-      militaryMusterRules,
-      worldFinancialRecords,
-      diplomacy,
-      claims,
-    }),
-    playerCharacterState: formatRows(playerCharacterContext),
-    unassignedAiCharacters: formatRows(aiCharacters),
-    playerRequest,
+export async function loadGroqWorldTurnResolutionPrompt(input: {
+  worldTurn: number;
+  orders: Array<{ actorCharacterId: number; controller: "player" | "ai"; action: unknown }>;
+}) {
+  const authoritativeWorldContext = await loadWorldContext();
+  return buildWorldTurnResolutionPrompt({
+    worldTurn: input.worldTurn,
+    authoritativeWorldContext,
+    orders: JSON.stringify(input.orders),
   });
 }
+
+export { loadGroqCharacterPrompts };

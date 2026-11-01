@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:game": "node --experimental-strip-types --test lib/game/engine.test.mjs"
+    "test:game": "node --experimental-strip-types --test lib/game/engine.test.mjs lib/game/knowledge.test.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

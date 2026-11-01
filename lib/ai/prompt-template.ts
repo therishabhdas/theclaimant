@@ -1,26 +1,21 @@
 import "server-only";
 
-export const GROQ_GAME_SYSTEM_PROMPT = `You are the game master and controller of non-player characters for The Claimant, a persistent political role-playing game set in Westeros.
+export const GROQ_GAME_SYSTEM_PROMPT = `You are deciding one character's order in The Claimant, a persistent political role-playing game set in Westeros.
 
-Use only the supplied reference, current campaign state, event history, and player input. Treat the starting reference as opening canon and later recorded events and current state as its updates. Do not import later story developments that are not recorded in this campaign.
+Use only the public world context and the acting character's scoped knowledge, history, and situation supplied below. The server withholds facts this character does not know. Do not infer hidden facts from omissions or introduce later story developments.
 
-Preserve established facts and chronology. A missing or null value means unknown, not permission to invent a fact. Keep travel, communication delays, character locations, and the limits of each character's knowledge plausible.
+Preserve established facts and chronology. A missing or null value means unknown, not permission to invent a fact. Keep travel, communication delays, and the limits of this character's knowledge plausible.
 
-The server-designated player character is controlled by the player. Do not choose that character's actions, dialogue, intentions, or decisions. Control only characters explicitly listed as unassigned and AI-controlled. Do not assume that an unassigned character knows a fact merely because it appears in the canonical reference or campaign data; use that character's recorded knowledge and plausible opportunities to learn it. Never reveal private information through narration or dialogue to a character who does not know or suspect it.
+Choose exactly one primary action for the designated actor. Never choose actions for another character. A recorded suspicion supplies clues and uncertainty only, not the canonical truth. A misbelief supplies the incorrect belief only. Forgotten facts are not current knowledge.
 
-One accepted gameplay turn advances seven in-world days. The exact calendar day remains unknown; do not invent one. Supported mechanical actions are travel, mustering, diplomacy proposals and their resolution, war declarations and participation, and waiting. Do not narrate unsupported battles, assassinations, or other unsupported state changes as completed.
-
-Follow the player's request without treating a proposal or intention as an event that has already happened. Do not claim that campaign state or history has been updated unless the application explicitly records that update. If essential information is missing, state the uncertainty rather than silently filling it in.`;
+The seven-day global turn is shared by all players. Orders are submitted simultaneously; do not assume another order has already happened. Supported mechanical actions are travel, mustering, diplomacy proposals and their resolution, war declarations and participation, and waiting. Use wait when no supported action is justified.`;
 
 export type GroqGamePromptContext = {
-  startingReference: string;
-  currentWorldState: string;
-  currentRealmSituation: string;
+  publicWorldContext: string;
+  actorContext: string;
+  actorKnowledge: string;
   eventHistory: string;
-  characterAndLocationStatus: string;
-  housesAndDiplomacy: string;
-  playerCharacterState: string;
-  unassignedAiCharacters: string;
+  travelContext: string;
   playerRequest: string;
 };
 
@@ -31,17 +26,11 @@ export type GroqGamePrompt = {
 
 export function buildGroqGamePrompt(context: GroqGamePromptContext): GroqGamePrompt {
   const sections = [
-    ["STARTING REFERENCE", context.startingReference],
-    ["CURRENT WORLD STATE", context.currentWorldState],
-    ["CURRENT REALM AND REGIONAL SITUATION", context.currentRealmSituation],
-    ["CHRONOLOGICAL EVENT HISTORY", context.eventHistory],
-    ["CHARACTERS AND LOCATIONS: CURRENT STATUS", context.characterAndLocationStatus],
-    ["HOUSES, WARS, CLAIMS, AND DIPLOMACY", context.housesAndDiplomacy],
-    ["PLAYER CHARACTER AND PLAYER STATE", context.playerCharacterState],
-    [
-      "UNASSIGNED CHARACTERS CONTROLLED BY THE AI",
-      context.unassignedAiCharacters,
-    ],
+    ["PUBLIC WORLD CONTEXT", context.publicWorldContext],
+    ["DESIGNATED ACTOR AND CURRENT SITUATION", context.actorContext],
+    ["FACTS THIS CHARACTER KNOWS", context.actorKnowledge],
+    ["EVENTS THIS CHARACTER KNOWS", context.eventHistory],
+    ["RELEVANT TRAVEL ROUTES AND JOURNEYS", context.travelContext],
     ["PLAYER REQUEST", context.playerRequest],
   ];
 
@@ -50,5 +39,34 @@ export function buildGroqGamePrompt(context: GroqGamePromptContext): GroqGamePro
     user: sections
       .map(([heading, content]) => `${heading}\n${content.trim()}`)
       .join("\n\n"),
+  };
+}
+
+export function buildWorldTurnResolutionPrompt(input: {
+  worldTurn: number;
+  authoritativeWorldContext: string;
+  orders: string;
+}): GroqGamePrompt {
+  return {
+    system: `You are the authoritative game master resolving one shared weekly turn in The Claimant.
+
+The supplied world context is confidential and may contain facts unknown to individual characters. Use it only to adjudicate the simultaneously submitted structured orders. Do not treat any order as having happened before another, and do not resolve orders in sequence. Decide whether each order is accepted or rejected based on the opening world snapshot and the combined consequences of all orders. If a simultaneous conflict cannot be reconciled, reject all conflicting orders; never give an advantage based on list order.
+
+Return exactly one JSON object with exactly these fields:
+{
+  "decisions": [{"actorCharacterId": 1, "decision": "accept | reject", "reason": "string"}],
+  "eventTitle": "string",
+  "eventType": "political | military | personal | movement | information | promise | decision | other",
+  "canonicalSummary": "string"
+}
+
+Return one decision for every supplied order and no others. A wait/pass order must be accepted. Do not reveal confidential context in a reason. The canonical summary is for trusted internal history only, not player-facing narration. Do not return actions or alter submitted orders.`,
+    user: [
+      `RESOLVING SHARED WORLD TURN ${input.worldTurn}`,
+      "AUTHORITATIVE WORLD CONTEXT (GAME MASTER ONLY)",
+      input.authoritativeWorldContext,
+      "SIMULTANEOUS PLAYER AND NPC ORDERS",
+      input.orders,
+    ].join("\n\n"),
   };
 }

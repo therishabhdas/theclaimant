@@ -96,6 +96,7 @@ create or replace function public.commit_game_turn(
   p_event_title text,
   p_event_type text,
   p_event_summary text,
+  p_character_knowledge jsonb,
   p_actions jsonb
 )
 returns jsonb
@@ -167,10 +168,12 @@ begin
   ) then
     raise exception 'GAME_INVALID_REQUEST: Unsupported event type.';
   end if;
-  if jsonb_typeof(p_actions) <> 'array'
-    or jsonb_array_length(p_actions) < 1
-    or jsonb_array_length(p_actions) > 8 then
-    raise exception 'GAME_INVALID_REQUEST: A turn must contain one to eight actions.';
+  if jsonb_typeof(p_character_knowledge) is distinct from 'object' then
+    raise exception 'GAME_INVALID_REQUEST: Character knowledge must be a JSON object.';
+  end if;
+  if jsonb_typeof(p_actions) is distinct from 'array'
+    or jsonb_array_length(p_actions) > 1000 then
+    raise exception 'GAME_INVALID_REQUEST: A turn may contain at most 1000 actions.';
   end if;
 
   select * into world
@@ -291,12 +294,6 @@ begin
     for update;
     if not found then
       raise exception 'GAME_INVALID_ACTION: Actor character does not exist.';
-    end if;
-    if actor_id <> p_character_id and exists (
-      select 1 from public.user_character_assignments
-      where character_id = actor_id
-    ) then
-      raise exception 'GAME_INVALID_ACTION: Actor character is controlled by another player.';
     end if;
     actor_house_id := coalesce(actor.current_house_id, actor.starting_house_id);
     affected_character_ids := array_append(affected_character_ids, actor_id);
@@ -669,7 +666,7 @@ begin
   insert into public.game_events (
     world_state_id, world_date_label, event_type, title,
     canonical_summary, public_summary, affected_character_ids,
-    affected_house_ids, location, state_changes
+    affected_house_ids, location, character_knowledge, state_changes
   )
   values (
     1,
@@ -681,6 +678,7 @@ begin
     affected_character_ids,
     affected_house_ids,
     current_location_name,
+    p_character_knowledge,
     state_changes
   )
   returning id into event_id;
@@ -724,9 +722,9 @@ $$;
 
 revoke all on function public.commit_game_turn(
   uuid, integer, uuid, bigint, text, text, text, text, text, jsonb
-) from public, anon, authenticated;
-grant execute on function public.commit_game_turn(
-  uuid, integer, uuid, bigint, text, text, text, text, text, jsonb
-) to service_role;
+) from public, anon, authenticated, service_role;
+revoke all on function public.commit_game_turn(
+  uuid, integer, uuid, bigint, text, text, text, text, text, jsonb, jsonb
+) from public, anon, authenticated, service_role;
 
 commit;
