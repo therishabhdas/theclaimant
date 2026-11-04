@@ -156,8 +156,7 @@ mandatory.
 Copy `.env.example` to `.env.local` if needed and set
 `SUPABASE_SERVICE_ROLE_KEY` from your Supabase project's API settings. This key
 grants privileged database access: keep it secret and use it only in
-server-side code. Set `CRON_SECRET` to a strong random value for scheduled
-resolution. [`lib/game/events.ts`](./lib/game/events.ts) provides
+server-side code. [`lib/game/events.ts`](./lib/game/events.ts) provides
 `appendGameEvent()`, `getGameEvents()`, `loadWorldContext()`, and
 `loadGroqGamePrompt(userId, playerRequest)`. Player prompts contain public
 context, the assigned character's own knowledge and history, and relevant
@@ -202,19 +201,20 @@ seven-day clock advance atomically. It then opens the next planning window.
 The participant list is snapshotted when a planning window opens; newly
 assigned characters join the following window.
 
-The authenticated `GET /api/game/turn` endpoint reports the current phase,
-deadline, and only the signed-in player's order status and previous resolved
-status; it does not expose other players' orders or outcomes. The `POST`
-response likewise contains no other player's result.
+The authenticated `GET /api/game/turn` endpoint also attempts to resolve an
+eligible turn before reporting the current phase, deadline, and only the
+signed-in player's order status and previous resolved status. It does not
+expose other players' orders or outcomes. The `POST` response likewise
+contains no other player's result. Resolution is activity-driven: the last
+player submission triggers immediate resolution, and status requests advance
+deadline-triggered resolution in resumable batches. The app does not require a
+cron service or separate scheduler. If nobody is using the app or polling this
+status endpoint after a deadline, the automatic passes and resolution wait
+until the next request.
 
-For Vercel plans that support five-minute Cron schedules,
-[`vercel.json`](./vercel.json) invokes the protected `GET /api/game/resolve`
-route every five minutes. Set `CRON_SECRET` in the deployment environment so
-Vercel sends the matching bearer token. Other hosting providers must configure
-an equivalent scheduled request with `Authorization: Bearer $CRON_SECRET`;
-automatic deadline passes occur only while that scheduler is enabled. NPC
-orders are persisted in small batches so timed-out resolution can resume
-without discarding earlier proposals.
+For applications that need resolution at a precise time while no players are
+active, deploy a separately managed always-on worker or scheduler appropriate
+to the host. This repository does not assume a particular hosting provider.
 
 The engine supports character travel on routes with available travel
 estimates, regional levy muster orders, private diplomacy proposals and

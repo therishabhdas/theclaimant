@@ -594,6 +594,14 @@ export async function resolveGlobalWorldTurn(): Promise<{
 
     const npcOrders = await inferNpcOrders(client, turnNumber, npcRows);
     if (npcOrders.size < npcRows.length) {
+      const { error: releaseError } = await client.rpc("release_game_turn_resolution", {
+        p_turn_number: turnNumber,
+      });
+      if (releaseError) {
+        throw new Error(
+          `NPC orders were saved, but the world-turn resolution lease could not be released: ${releaseError.message}`,
+        );
+      }
       return { resolved: false, turnNumber };
     }
     for (const [actorId, actions] of npcOrders) {
@@ -696,6 +704,7 @@ export async function processPlayerTurn(input: {
         "The request ID was already used for a different order.",
       );
     }
+    await resolveGlobalWorldTurn();
     const [orderRows, stateRows] = await Promise.all([
       readRows(client.from("gameplay_turn_orders")
         .select("resolution_status")
@@ -745,6 +754,10 @@ export async function processPlayerTurn(input: {
     p_player_request: input.playerRequest,
     p_action_data: plan.actions,
   });
+  if (error?.message.includes("GAME_DEADLINE")) {
+    await resolveGlobalWorldTurn();
+    throw new GamePlanningClosedError();
+  }
   if (error) raiseRpcError(error.message, "Unable to submit the world-turn order");
   const result = objectField(data, "submitted player order");
   const submission: TurnCommit = {

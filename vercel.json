@@ -1,8 +1,0 @@
-{
-  "crons": [
-    {
-      "path": "/api/game/resolve",
-      "schedule": "*/5 * * * *"
-    }
-  ]
-}

@@ -7,6 +7,7 @@ import {
   StaleGameStateError,
   getPlayerTurnStatus,
   processPlayerTurn,
+  resolveGlobalWorldTurn,
 } from "../../../../lib/game/turn-service";
 
 export const maxDuration = 300;
@@ -118,6 +119,7 @@ export async function GET(request: Request) {
     return Response.json({ error: "Sign in before checking game-turn status." }, { status: 401 });
   }
   try {
+    await resolveGlobalWorldTurn();
     const status = await getPlayerTurnStatus(user.id);
     return Response.json(status, { headers: { "Cache-Control": "no-store" } });
   } catch (statusError) {
