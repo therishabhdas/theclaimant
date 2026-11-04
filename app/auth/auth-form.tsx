@@ -6,12 +6,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "../../lib/supabase/client";
 
 function getSafeNextPath(value: string | null) {
-  if (!value?.startsWith("/")) {
+  if (!value?.startsWith("/") || value.startsWith("//")) {
     return "/account";
   }
 
-  const destination = new URL(value, window.location.origin);
-  return destination.origin === window.location.origin
+  const destination = new URL(value, "https://theclaimant.invalid");
+  return destination.origin === "https://theclaimant.invalid"
     ? `${destination.pathname}${destination.search}${destination.hash}`
     : "/account";
 }

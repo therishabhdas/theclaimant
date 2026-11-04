@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { signOut } from "../auth/actions";
 import { SiteFooter, SiteHeader } from "../components/site-chrome";
 import CharacterDraw from "./character-draw";
+import WorldTurnPanel from "./world-turn-panel";
 import {
   getAssignedCharacter,
   type AssignedCharacter,
@@ -15,6 +16,7 @@ import {
   type CharacterAccountDetails,
   type RealmOverview,
 } from "../../lib/game/account-world";
+import { getPlayerTurnStatus } from "../../lib/game/turn-service";
 import { createClient } from "../../lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -58,6 +60,8 @@ async function AccountDetails() {
   let assignedCharacter: AssignedCharacter | null = null;
   let characterDetails: CharacterAccountDetails | null = null;
   let characterDetailsError: string | null = null;
+  let turnStatus: Awaited<ReturnType<typeof getPlayerTurnStatus>> | null = null;
+  let turnStatusError: string | null = null;
   let assignmentErrorMessage: string | null = null;
   let assignmentSetupError: string | null = null;
 
@@ -79,6 +83,14 @@ async function AccountDetails() {
         console.error("Unable to load the character's account details:", cause);
         characterDetailsError =
           "Some character details could not be loaded. Check that the world-state database setup is complete.";
+      }
+
+      try {
+        turnStatus = await getPlayerTurnStatus(user.id);
+      } catch (cause) {
+        console.error("Unable to load the player's world-turn status:", cause);
+        turnStatusError =
+          "The shared-turn status could not be loaded. Check that the global turn-cycle database setup is complete.";
       }
     }
   }
@@ -108,6 +120,9 @@ async function AccountDetails() {
         setupError={assignmentSetupError}
         initialError={assignmentErrorMessage}
       />
+      {assignedCharacter && (
+        <WorldTurnPanel initialStatus={turnStatus} initialError={turnStatusError} />
+      )}
       <RealmOverviewSection overview={realmOverview} error={realmOverviewError} />
       <section className="account-actions">
         <form action={signOut}>

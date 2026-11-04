@@ -40,6 +40,15 @@ type TurnCommit = {
   idempotent: boolean;
 };
 
+export type PlayerTurnStatus = {
+  turnNumber: number;
+  phase: "planning" | "resolving";
+  deadlineAt: string;
+  participating: boolean;
+  ownOrderStatus: string;
+  previousTurnStatus: string | null;
+};
+
 export class StaleGameStateError extends Error {
   constructor() {
     super("The world changed while this turn was being processed. Please submit it again.");
@@ -929,14 +938,7 @@ export async function processPlayerTurn(input: {
   return submission;
 }
 
-export async function getPlayerTurnStatus(userId: string): Promise<{
-  turnNumber: number;
-  phase: string;
-  deadlineAt: string;
-  participating: boolean;
-  ownOrderStatus: string;
-  previousTurnStatus: string | null;
-}> {
+export async function getPlayerTurnStatus(userId: string): Promise<PlayerTurnStatus> {
   const client = getAdminClient();
   const [assignmentRows, stateRows] = await Promise.all([
     readRows(client.from("user_character_assignments")

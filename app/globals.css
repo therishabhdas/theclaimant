@@ -381,6 +381,31 @@ a:focus-visible {
 .account-actions { display: flex; justify-content: flex-end; width: min(82%, 1210px); margin: 0 auto; padding: 24px 0 38px; }
 .account-actions form { margin: 0; }
 .account-actions .button-outline { min-height: 40px; cursor: pointer; }
+.world-turn-panel { width: min(82%, 1210px); margin: 34px auto 42px; padding: 26px 30px; border: 1px solid #c9bfad; background: var(--paper-light); }
+.world-turn-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding-bottom: 20px; border-bottom: 1px solid #d7cebd; }
+.world-turn-heading .eyebrow { margin: 0 0 8px; }
+.world-turn-heading h2 { margin: 0; font-family: var(--serif); font-size: clamp(29px, 4vw, 42px); font-weight: 400; letter-spacing: -.04em; }
+.world-turn-phase { padding: 6px 10px; border: 1px solid #b28c55; color: #66502f; font-size: 8px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.world-turn-phase.is-resolving { border-color: var(--red); color: var(--red); }
+.world-turn-status { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; padding: 19px 0; }
+.world-turn-status > div { display: grid; gap: 5px; }
+.world-turn-status span { color: #776e60; font-size: 8px; font-weight: 700; letter-spacing: .11em; }
+.world-turn-status strong { color: var(--ink); font-family: var(--serif); font-size: 15px; font-weight: 400; }
+.world-turn-note, .world-turn-previous { margin: 0 0 17px; color: #655e53; font-family: var(--serif); font-size: 12px; line-height: 1.7; }
+.world-turn-previous { padding-top: 12px; border-top: 1px solid #e0d8c9; }
+.world-turn-form { display: grid; gap: 9px; padding-top: 18px; border-top: 1px solid #d7cebd; }
+.world-turn-form label { color: var(--ink); font-family: var(--serif); font-size: 21px; }
+.world-turn-form > p { margin: -5px 0 3px; color: #655e53; font-size: 11px; line-height: 1.6; }
+.world-turn-form textarea { width: 100%; min-height: 105px; resize: vertical; padding: 12px 14px; border: 1px solid #bfb6a6; border-radius: 0; background: #fffdf7; color: var(--ink); font: inherit; font-size: 12px; line-height: 1.6; }
+.world-turn-form textarea:focus-visible, .world-turn-refresh:focus-visible, .world-turn-submit-row .button-primary:focus-visible { outline: 2px solid var(--red); outline-offset: 3px; }
+.world-turn-submit-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.world-turn-submit-row > span { color: #776e60; font-size: 9px; }
+.world-turn-submit-row .button-primary { cursor: pointer; }
+.world-turn-submit-row .button-primary:disabled { cursor: wait; opacity: .65; }
+.world-turn-error, .world-turn-success { margin: 8px 0 0; padding: 11px 13px; border-left: 2px solid var(--red); background: #f0e2dc; color: var(--red-deep); font-size: 11px; line-height: 1.6; }
+.world-turn-success { border-color: #6a7752; background: #e7eadf; color: #435035; }
+.world-turn-refresh { margin-top: 18px; padding: 0; border: 0; background: none; color: var(--red); cursor: pointer; font: inherit; font-size: 10px; text-decoration: underline; text-underline-offset: 3px; }
+.world-turn-refresh:disabled { cursor: wait; opacity: .65; }
 .assigned-house-resources { margin-top: 19px; padding-top: 15px; border-top: 1px solid #d7cebd; }
 .account-detail-list { display: grid; gap: 12px; margin: 14px 0 0; padding: 0; list-style: none; }
 .account-detail-list li { display: grid; gap: 4px; padding: 0 0 11px; border-bottom: 1px solid #e0d8c9; }
@@ -483,7 +508,7 @@ a:focus-visible {
 @media (min-width: 1500px) { .hero { min-height: 710px; } }
 
 @media (max-width: 900px) {
-  .hero, .world-note, .closing-cta, .about-hero, .about-principles, .directory-hero, .account-intro, .account-actions { width: 88%; }
+  .hero, .world-note, .closing-cta, .about-hero, .about-principles, .directory-hero, .account-intro, .account-actions, .world-turn-panel { width: 88%; }
   .hero { min-height: 620px; grid-template-columns: 1fr .88fr; gap: 4%; }
   .hero h1 { font-size: clamp(48px, 6.4vw, 64px); }
   .record-inner { padding-right: 19px; padding-left: 19px; }
@@ -529,6 +554,9 @@ a:focus-visible {
   .assigned-character-section { padding: 21px 19px 23px; }
   .assigned-story-section { grid-column: auto; }
   .account-actions { width: calc(100% - 44px); }
+  .world-turn-panel { width: calc(100% - 44px); margin: 28px auto 34px; padding: 20px 18px; }
+  .world-turn-status { grid-template-columns: 1fr; gap: 13px; }
+  .world-turn-submit-row { align-items: flex-start; flex-direction: column; }
   .account-realm { padding: 43px 22px 48px; }
   .account-realm-heading { display: block; }
   .account-realm-heading h2 { font-size: 38px; }
