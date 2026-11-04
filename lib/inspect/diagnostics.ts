@@ -132,6 +132,8 @@ const tableDefinitions: TableDefinition[] = [
       "current_situation text", "updated_at timestamptz", "opening_situation text",
       "turn_number integer", "elapsed_days integer", "gameplay_revision bigint",
       "turn_phase text", "planning_deadline_at timestamptz", "resolution_started_at timestamptz",
+      "resolution_lease_token uuid", "resolution_lease_owner text",
+      "resolution_lease_expires_at timestamptz", "resolution_checkpoint jsonb",
     ],
   },
   {
@@ -140,6 +142,15 @@ const tableDefinitions: TableDefinition[] = [
     columns: [
       "id smallint PK", "world_state_id smallint FK", "name text",
       "created_at timestamptz", "current_situation text", "opening_situation text",
+    ],
+  },
+  {
+    name: "gameplay_order_rate_limits",
+    group: "Private game state",
+    hideRowCount: true,
+    columns: [
+      "user_id uuid PK/FK", "window_started_at timestamptz",
+      "request_count integer", "updated_at timestamptz",
     ],
   },
   {

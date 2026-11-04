@@ -3,14 +3,16 @@ import { createClient } from "../../../../lib/supabase/server";
 import { GameActionValidationError } from "../../../../lib/game/engine";
 import {
   GameOrderAlreadySubmittedError,
+  GameOrderRateLimitError,
+  GameNotAssignedError,
   GamePlanningClosedError,
   StaleGameStateError,
   getPlayerTurnStatus,
   processPlayerTurn,
-  resolveGlobalWorldTurn,
 } from "../../../../lib/game/turn-service";
 
 export const maxDuration = 300;
+const MAX_BODY_BYTES = 32_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -28,6 +30,36 @@ function isSameOrigin(request: Request) {
   }
   const fetchSite = request.headers.get("sec-fetch-site");
   return fetchSite === "same-origin" || fetchSite === "same-site";
+}
+
+async function readJsonBody(request: Request): Promise<unknown> {
+  const contentLength = request.headers.get("content-length");
+  if (contentLength !== null && Number(contentLength) > MAX_BODY_BYTES) {
+    throw new RangeError("The request body is too large.");
+  }
+  if (!request.body) throw new SyntaxError("The request body is empty.");
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalBytes += value.byteLength;
+    if (totalBytes > MAX_BODY_BYTES) {
+      await reader.cancel();
+      throw new RangeError("The request body is too large.");
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(new TextDecoder().decode(bytes)) as unknown;
 }
 
 export async function POST(request: Request) {
@@ -49,8 +81,11 @@ export async function POST(request: Request) {
 
   let body: unknown;
   try {
-    body = await request.json();
-  } catch {
+    body = await readJsonBody(request);
+  } catch (error) {
+    if (error instanceof RangeError) {
+      return Response.json({ error: error.message }, { status: 413 });
+    }
     return Response.json({ error: "The request body must be valid JSON." }, { status: 400 });
   }
   if (
@@ -98,6 +133,15 @@ export async function POST(request: Request) {
     if (error instanceof GameOrderAlreadySubmittedError) {
       return Response.json({ error: error.message }, { status: 409 });
     }
+    if (error instanceof GameNotAssignedError) {
+      return Response.json({ error: error.message }, { status: 403 });
+    }
+    if (error instanceof GameOrderRateLimitError) {
+      return Response.json(
+        { error: error.message },
+        { status: 429, headers: { "Retry-After": "600" } },
+      );
+    }
     console.error(
       "Unable to process the gameplay turn:",
       error instanceof Error ? error.message : "Unknown error",
@@ -119,10 +163,12 @@ export async function GET(request: Request) {
     return Response.json({ error: "Sign in before checking game-turn status." }, { status: 401 });
   }
   try {
-    await resolveGlobalWorldTurn();
     const status = await getPlayerTurnStatus(user.id);
     return Response.json(status, { headers: { "Cache-Control": "no-store" } });
   } catch (statusError) {
+    if (statusError instanceof GameNotAssignedError) {
+      return Response.json({ error: statusError.message }, { status: 403 });
+    }
     console.error(
       "Unable to load gameplay turn status:",
       statusError instanceof Error ? statusError.message : "Unknown error",

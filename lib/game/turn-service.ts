@@ -1,5 +1,6 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import {
   inferStructuredGameTurn,
@@ -9,6 +10,7 @@ import type { GameAction } from "./engine";
 import {
   GameActionValidationError,
   parseStructuredGameTurn,
+  parseStructuredWorldTurnResolution,
   simulateSimultaneousWorldTurn,
   type DiplomacyRelationType,
   type EngineDiplomacyRecord,
@@ -56,6 +58,20 @@ export class GameOrderAlreadySubmittedError extends Error {
   constructor(message = "An order has already been submitted for this world turn.") {
     super(message);
     this.name = "GameOrderAlreadySubmittedError";
+  }
+}
+
+export class GameNotAssignedError extends Error {
+  constructor(message = "The player is not assigned to a character in this turn.") {
+    super(message);
+    this.name = "GameNotAssignedError";
+  }
+}
+
+export class GameOrderRateLimitError extends Error {
+  constructor(message = "Too many order attempts. Try again in a few minutes.") {
+    super(message);
+    this.name = "GameOrderRateLimitError";
   }
 }
 
@@ -208,7 +224,9 @@ async function loadEngineSnapshot(
   ]);
 
   if (userId !== null && assignmentRows.length !== 1) {
-    throw new Error("The authenticated player must have exactly one assigned character.");
+    throw new GameNotAssignedError(
+      "The authenticated player must have exactly one assigned character.",
+    );
   }
   if (stateRows.length !== 1) {
     throw new Error("The world state record has not been initialized.");
@@ -460,6 +478,15 @@ function raiseRpcError(message: string, context: string): never {
   if (message.includes("GAME_ALREADY_SUBMITTED")) {
     throw new GameOrderAlreadySubmittedError();
   }
+  if (message.includes("GAME_NOT_ASSIGNED")) {
+    throw new GameNotAssignedError(message.split(": ").slice(1).join(": "));
+  }
+  if (message.includes("GAME_RATE_LIMIT")) {
+    throw new GameOrderRateLimitError(message.split(": ").slice(1).join(": "));
+  }
+  if (message.includes("GAME_LEASE_LOST")) {
+    throw new Error(`Resolution lease was lost: ${message}`);
+  }
   if (message.includes("Request ID was already used")) {
     throw new GameOrderAlreadySubmittedError(
       "The request ID was already used for a different order.",
@@ -471,10 +498,55 @@ function raiseRpcError(message: string, context: string): never {
   throw new Error(`${context}: ${message}`);
 }
 
+function startResolutionLeaseHeartbeat(input: {
+  client: ReturnType<typeof getAdminClient>;
+  turnNumber: number;
+  leaseToken: string;
+  leaseOwner: string;
+}) {
+  let failure: Error | null = null;
+  let renewalInFlight = false;
+  const timer = setInterval(() => {
+    if (renewalInFlight || failure) return;
+    renewalInFlight = true;
+    void Promise.resolve(input.client.rpc("renew_game_turn_resolution", {
+      p_turn_number: input.turnNumber,
+      p_lease_token: input.leaseToken,
+      p_lease_owner: input.leaseOwner,
+      p_lease_seconds: 120,
+    })).then(({ error }) => {
+      if (error) {
+        failure = new Error(`Unable to renew the world-turn resolution lease: ${error.message}`);
+        clearInterval(timer);
+      }
+    }).catch((error: unknown) => {
+      failure = new Error(
+        `Unable to renew the world-turn resolution lease: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`,
+      );
+      clearInterval(timer);
+    }).finally(() => {
+      renewalInFlight = false;
+    });
+  }, 25000);
+
+  return {
+    assertActive() {
+      if (failure) throw failure;
+    },
+    stop() {
+      clearInterval(timer);
+    },
+  };
+}
+
 async function inferNpcOrders(
   client: ReturnType<typeof getAdminClient>,
   turnNumber: number,
   npcRows: DatabaseRow[],
+  leaseToken: string,
+  leaseOwner: string,
 ) {
   const pending = npcRows.filter((row) => row.action_data === null).slice(0, 4);
   const storedOrders = new Map<number, GameAction[]>();
@@ -520,6 +592,8 @@ async function inferNpcOrders(
   }));
   const { error } = await client.rpc("save_npc_game_orders", {
     p_turn_number: turnNumber,
+    p_lease_token: leaseToken,
+    p_lease_owner: leaseOwner,
     p_orders: savedOrders,
   });
   if (error) raiseRpcError(error.message, "Unable to save AI orders");
@@ -528,19 +602,37 @@ async function inferNpcOrders(
   return storedOrders;
 }
 
-export async function resolveGlobalWorldTurn(): Promise<{
+export async function resolveGlobalWorldTurn(
+  leaseOwner = `worker:${randomUUID()}`,
+): Promise<{
   resolved: boolean;
   turnNumber: number;
 }> {
   const client = getAdminClient();
   const { data: claimData, error: claimError } = await client.rpc(
     "claim_game_turn_resolution",
+    {
+      p_lease_owner: leaseOwner,
+      p_lease_seconds: 120,
+    },
   );
   if (claimError) raiseRpcError(claimError.message, "Unable to claim world-turn resolution");
   const claim = objectField(claimData, "world-turn claim");
   const turnNumber = rpcNumber(claim, "turnNumber", "world-turn claim");
   if (claim.claimed !== true) return { resolved: false, turnNumber };
   const revision = rpcNumber(claim, "revision", "world-turn claim");
+  const leaseToken = stringField(claim, "leaseToken", "world-turn claim");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(leaseToken)) {
+    throw new Error("The database returned an invalid resolution lease token.");
+  }
+  const heartbeat = startResolutionLeaseHeartbeat({
+    client,
+    turnNumber,
+    leaseToken,
+    leaseOwner,
+  });
+  let leaseReleased = false;
+  let resolutionCommitted = false;
 
   try {
     const { snapshot } = await loadEngineSnapshot(null, client);
@@ -592,16 +684,27 @@ export async function resolveGlobalWorldTurn(): Promise<{
       });
     }
 
-    const npcOrders = await inferNpcOrders(client, turnNumber, npcRows);
+    heartbeat.assertActive();
+    const npcOrders = await inferNpcOrders(
+      client,
+      turnNumber,
+      npcRows,
+      leaseToken,
+      leaseOwner,
+    );
     if (npcOrders.size < npcRows.length) {
+      heartbeat.assertActive();
       const { error: releaseError } = await client.rpc("release_game_turn_resolution", {
         p_turn_number: turnNumber,
+        p_lease_token: leaseToken,
+        p_lease_owner: leaseOwner,
       });
       if (releaseError) {
         throw new Error(
           `NPC orders were saved, but the world-turn resolution lease could not be released: ${releaseError.message}`,
         );
       }
+      leaseReleased = true;
       return { resolved: false, turnNumber };
     }
     for (const [actorId, actions] of npcOrders) {
@@ -612,14 +715,29 @@ export async function resolveGlobalWorldTurn(): Promise<{
       });
     }
 
-    const prompt = await loadGroqWorldTurnResolutionPrompt({
-      worldTurn: turnNumber,
-      orders: allOrders,
-    });
-    const resolution = await inferStructuredWorldTurnResolution(
-      prompt,
-      allOrders.map((order) => order.actorCharacterId),
-    );
+    const expectedActorIds = allOrders.map((order) => order.actorCharacterId);
+    const checkpoint = claim.checkpoint;
+    let resolution;
+    if (checkpoint !== null && checkpoint !== undefined) {
+      resolution = parseStructuredWorldTurnResolution(checkpoint, expectedActorIds);
+    } else {
+      const prompt = await loadGroqWorldTurnResolutionPrompt({
+        worldTurn: turnNumber,
+        orders: allOrders,
+      });
+      resolution = await inferStructuredWorldTurnResolution(prompt, expectedActorIds);
+      heartbeat.assertActive();
+      const { error: checkpointError } = await client.rpc("save_game_turn_checkpoint", {
+        p_turn_number: turnNumber,
+        p_lease_token: leaseToken,
+        p_lease_owner: leaseOwner,
+        p_checkpoint: resolution,
+      });
+      if (checkpointError) {
+        raiseRpcError(checkpointError.message, "Unable to persist the world-turn resolution");
+      }
+    }
+    heartbeat.assertActive();
     const decisionByActor = new Map(
       resolution.decisions.map((decision) => [decision.actorCharacterId, decision]),
     );
@@ -652,11 +770,14 @@ export async function resolveGlobalWorldTurn(): Promise<{
       decision: result.status === "rejected" ? "reject" : "accept",
       reason: result.reason,
     }));
+    heartbeat.assertActive();
     const { data: resolutionData, error: resolutionError } = await client.rpc(
       "resolve_game_turn",
       {
         p_turn_number: turnNumber,
         p_expected_revision: revision,
+        p_lease_token: leaseToken,
+        p_lease_owner: leaseOwner,
         p_decisions: validatedDecisions,
         p_event_title: resolution.eventTitle,
         p_event_type: resolution.eventType,
@@ -666,22 +787,32 @@ export async function resolveGlobalWorldTurn(): Promise<{
     if (resolutionError) {
       raiseRpcError(resolutionError.message, "Unable to commit the resolved world turn");
     }
+    resolutionCommitted = true;
     const committed = objectField(resolutionData, "resolved world turn");
     return {
       resolved: committed.status === "resolved",
       turnNumber: rpcNumber(committed, "resolvedTurn", "resolved world turn"),
     };
   } catch (error) {
-    const { error: releaseError } = await client.rpc("release_game_turn_resolution", {
-      p_turn_number: turnNumber,
-    });
-    if (releaseError) {
-      throw new Error(
-        `World-turn resolution failed and its lease could not be released: ${releaseError.message}`,
-        { cause: error },
-      );
+    if (!resolutionCommitted && !leaseReleased) {
+      const { error: releaseError } = await client.rpc("release_game_turn_resolution", {
+        p_turn_number: turnNumber,
+        p_lease_token: leaseToken,
+        p_lease_owner: leaseOwner,
+      });
+      if (releaseError && !releaseError.message.includes("GAME_LEASE_LOST")) {
+        throw new Error(
+          `World-turn resolution failed and its lease could not be released: ${releaseError.message}`,
+          { cause: error },
+        );
+      }
+      if (releaseError) {
+        console.warn("A stale worker could not release a newer resolution lease.");
+      }
     }
     throw error;
+  } finally {
+    heartbeat.stop();
   }
 }
 
@@ -690,6 +821,16 @@ export async function processPlayerTurn(input: {
   requestId: string;
   playerRequest: string;
 }): Promise<TurnCommit> {
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId) ||
+    input.playerRequest.trim().length === 0 ||
+    input.playerRequest.length > 6000
+  ) {
+    throw new GameActionValidationError([
+      "Provide a valid request UUID and an order between 1 and 6000 characters.",
+    ]);
+  }
+
   const client = getAdminClient();
   const existingRows = await readRows(
     client.from("gameplay_turn_orders")
@@ -704,7 +845,6 @@ export async function processPlayerTurn(input: {
         "The request ID was already used for a different order.",
       );
     }
-    await resolveGlobalWorldTurn();
     const [orderRows, stateRows] = await Promise.all([
       readRows(client.from("gameplay_turn_orders")
         .select("resolution_status")
@@ -726,9 +866,29 @@ export async function processPlayerTurn(input: {
     };
   }
 
-  const { snapshot, characterId } = await loadEngineSnapshot(input.userId, client);
-  if (characterId === null) {
-    throw new Error("The authenticated player has no assigned character.");
+  const { data: preflightData, error: preflightError } = await client.rpc(
+    "preflight_game_order",
+    {
+      p_user_id: input.userId,
+      p_request_id: input.requestId,
+      p_player_request: input.playerRequest,
+    },
+  );
+  if (preflightError) {
+    raiseRpcError(preflightError.message, "Unable to validate the player order");
+  }
+  const preflight = objectField(preflightData, "player-order preflight");
+  const characterId = rpcNumber(preflight, "characterId", "player-order preflight");
+  const expectedRevision = rpcNumber(preflight, "revision", "player-order preflight");
+  const { snapshot, characterId: snapshotCharacterId } = await loadEngineSnapshot(
+    input.userId,
+    client,
+  );
+  if (
+    snapshotCharacterId !== characterId ||
+    snapshot.revision !== expectedRevision
+  ) {
+    throw new StaleGameStateError();
   }
   const prompt = await loadGroqGamePrompt(input.userId, input.playerRequest);
   const plan = await inferStructuredGameTurn(prompt);
@@ -755,7 +915,6 @@ export async function processPlayerTurn(input: {
     p_action_data: plan.actions,
   });
   if (error?.message.includes("GAME_DEADLINE")) {
-    await resolveGlobalWorldTurn();
     throw new GamePlanningClosedError();
   }
   if (error) raiseRpcError(error.message, "Unable to submit the world-turn order");
@@ -767,25 +926,6 @@ export async function processPlayerTurn(input: {
     deadlineAt: rpcString(result, "deadlineAt", "submitted player order"),
     idempotent: result.idempotent === true,
   };
-  if (
-    typeof result.submittedCount === "number" &&
-    typeof result.requiredCount === "number" &&
-    result.submittedCount === result.requiredCount
-  ) {
-    const resolution = await resolveGlobalWorldTurn();
-    if (resolution.resolved) {
-      const statusRows = await readRows(client.from("gameplay_turn_orders")
-        .select("resolution_status")
-        .eq("request_id", input.requestId)
-        .eq("user_id", input.userId), "the resolved player order");
-      if (statusRows.length !== 1) throw new Error("The resolved player order is missing.");
-      submission.resolutionStatus = stringField(
-        statusRows[0],
-        "resolution_status",
-        "resolved player order",
-      );
-    }
-  }
   return submission;
 }
 
@@ -807,6 +947,7 @@ export async function getPlayerTurnStatus(userId: string): Promise<{
       .eq("id", 1), "the current world state"),
   ]);
   if (assignmentRows.length !== 1 || stateRows.length !== 1) {
+    if (assignmentRows.length !== 1) throw new GameNotAssignedError();
     throw new Error("The player assignment or world state is not initialized.");
   }
   const characterId = numberField(assignmentRows[0], "character_id", "assignment");

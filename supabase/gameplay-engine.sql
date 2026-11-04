@@ -108,6 +108,7 @@ declare
   world public.world_state%rowtype;
   existing_turn public.gameplay_turns%rowtype;
   assigned_character_id integer;
+  actor_user_id uuid;
   actor public.playable_characters%rowtype;
   actor_house_id bigint;
   target_house_id bigint;
@@ -149,8 +150,9 @@ declare
   current_location_name text;
   response jsonb;
 begin
-  if p_user_id is null or p_character_id is null or p_request_id is null then
-    raise exception 'GAME_INVALID_REQUEST: User, character, and request IDs are required.';
+  if p_request_id is null
+    or ((p_user_id is null) <> (p_character_id is null)) then
+    raise exception 'GAME_INVALID_REQUEST: Player identity must be supplied together, or omitted for a global turn.';
   end if;
   if length(trim(coalesce(p_player_request, ''))) = 0
     or length(p_player_request) > 6000 then
@@ -188,8 +190,8 @@ begin
   from public.gameplay_turns
   where request_id = p_request_id;
   if found then
-    if existing_turn.user_id <> p_user_id
-      or existing_turn.character_id <> p_character_id then
+    if existing_turn.user_id is distinct from p_user_id
+      or existing_turn.character_id is distinct from p_character_id then
       raise exception 'GAME_INVALID_REQUEST: Request ID was already used.';
     end if;
     return jsonb_build_object(
@@ -201,11 +203,13 @@ begin
     );
   end if;
 
-  select character_id into assigned_character_id
-  from public.user_character_assignments
-  where user_id = p_user_id;
-  if not found or assigned_character_id <> p_character_id then
-    raise exception 'GAME_NOT_ASSIGNED: The character is not assigned to this player.';
+  if p_user_id is not null then
+    select character_id into assigned_character_id
+    from public.user_character_assignments
+    where user_id = p_user_id;
+    if not found or assigned_character_id <> p_character_id then
+      raise exception 'GAME_NOT_ASSIGNED: The character is not assigned to this player.';
+    end if;
   end if;
   if world.gameplay_revision <> p_expected_revision then
     raise exception 'GAME_STALE_STATE: The world changed while this turn was being processed.';
@@ -299,6 +303,18 @@ begin
     affected_character_ids := array_append(affected_character_ids, actor_id);
 
     if action_type = 'move' then
+      actor_user_id := null;
+      if p_user_id is null then
+        select participant.user_id into actor_user_id
+        from public.gameplay_turn_participants as participant
+        where participant.world_state_id = 1
+          and participant.turn_number = world.turn_number
+          and participant.character_id = actor_id;
+      else
+        select assignment.user_id into actor_user_id
+        from public.user_character_assignments as assignment
+        where assignment.character_id = actor_id;
+      end if;
       route_id := (action ->> 'routeOptionId')::bigint;
       destination_id := (action ->> 'destinationLocationId')::bigint;
       party_type := action ->> 'partyType';
@@ -375,7 +391,7 @@ begin
       )
       values (
         1, route_id, actor.current_location_id, destination_id, 'planned',
-        party_type, party_size, now(), p_user_id, party_days, 0,
+        party_type, party_size, now(), actor_user_id, party_days, 0,
         'Travel uses the route estimate; unknown route conditions remain uncertain.'
       )
       returning id into v_journey_id;
@@ -386,7 +402,7 @@ begin
       )
       values (
         v_journey_id, actor_id,
-        case when actor_id = p_character_id then p_user_id else null end,
+        actor_user_id,
         'traveller', 'travelling', now()
       );
 
@@ -657,11 +673,13 @@ begin
     end if;
   end loop;
 
-  select location.name into current_location_name
-  from public.playable_characters as character
-  join public.playable_locations as location
-    on location.id = character.current_location_id
-  where character.id = p_character_id;
+  if p_character_id is not null then
+    select location.name into current_location_name
+    from public.playable_characters as character
+    join public.playable_locations as location
+      on location.id = character.current_location_id
+    where character.id = p_character_id;
+  end if;
 
   insert into public.game_events (
     world_state_id, world_date_label, event_type, title,
@@ -699,15 +717,17 @@ begin
   set source_event_id = event_id
   where war_id = any(created_war_ids);
 
-  insert into public.gameplay_turns (
-    request_id, turn_number, gameplay_revision, user_id, character_id,
-    player_request, narration, action_data, event_id
-  )
-  values (
-    p_request_id, world.turn_number, world.gameplay_revision,
-    p_user_id, p_character_id, p_player_request, p_narration, p_actions, event_id
-  )
-  returning id into turn_id;
+  if p_user_id is not null then
+    insert into public.gameplay_turns (
+      request_id, turn_number, gameplay_revision, user_id, character_id,
+      player_request, narration, action_data, event_id
+    )
+    values (
+      p_request_id, world.turn_number, world.gameplay_revision,
+      p_user_id, p_character_id, p_player_request, p_narration, p_actions, event_id
+    )
+    returning id into turn_id;
+  end if;
 
   response := jsonb_build_object(
     'turnId', turn_id,

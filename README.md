@@ -201,20 +201,41 @@ seven-day clock advance atomically. It then opens the next planning window.
 The participant list is snapshotted when a planning window opens; newly
 assigned characters join the following window.
 
-The authenticated `GET /api/game/turn` endpoint also attempts to resolve an
-eligible turn before reporting the current phase, deadline, and only the
-signed-in player's order status and previous resolved status. It does not
-expose other players' orders or outcomes. The `POST` response likewise
-contains no other player's result. Resolution is activity-driven: the last
-player submission triggers immediate resolution, and status requests advance
-deadline-triggered resolution in resumable batches. The app does not require a
-cron service or separate scheduler. If nobody is using the app or polling this
-status endpoint after a deadline, the automatic passes and resolution wait
-until the next request.
+The authenticated `GET /api/game/turn` endpoint is read-only. It reports the
+current phase, deadline, and only the signed-in player's order status and
+previous resolved status; it never runs inference or changes the world. The
+`POST` response likewise contains no other player's result.
 
-For applications that need resolution at a precise time while no players are
-active, deploy a separately managed always-on worker or scheduler appropriate
-to the host. This repository does not assume a particular hosting provider.
+Global resolution runs through a separate, continuously running Node worker.
+It polls `POST /api/internal/game-turn/resolve`, which requires the shared
+`GAME_WORKER_SECRET`. The database stores each worker lease, its expiry, NPC
+orders, and the master-resolution checkpoint, so another worker can reclaim
+an expired lease and resume after a process restart. The RPCs fence every
+write and commit with the current lease token; stale workers cannot overwrite
+newer progress. This worker is independent of player traffic and does not rely
+on Vercel Cron or an in-memory queue.
+
+To run it:
+
+1. Generate a random secret of at least 32 characters, for example with
+   `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`.
+2. Set `GAME_WORKER_SECRET` to the same secret in the Next.js server environment
+   and in the worker process environment. Never expose it as a `NEXT_PUBLIC_`
+   variable or commit it.
+3. Set `GAME_TURN_WORKER_ENDPOINT` in the worker environment to the reachable
+   app URL ending in `/api/internal/game-turn/resolve`. Use HTTPS except for a
+   local development endpoint. `GAME_TURN_WORKER_POLL_INTERVAL_MS` defaults to
+   30000 and may be increased if less frequent deadline checks are acceptable.
+4. Keep the worker process running under the host's process manager or
+   container orchestration with automatic restart enabled. Start it with
+   `npm run worker:game-turns`. Configure its logs and health monitoring using
+   the host's normal process-management tools.
+
+If the worker is stopped, world turns remain persisted and will be resolved
+after it restarts; deadline resolution is not guaranteed while no worker is
+running. The app server needs its normal Supabase and Groq environment
+variables. The worker needs only its endpoint, secret, and optional polling
+interval.
 
 The engine supports character travel on routes with available travel
 estimates, regional levy muster orders, private diplomacy proposals and
@@ -238,6 +259,12 @@ revisions are rejected. Events and diplomacy proposals remain private by
 default.
 
 Run the focused deterministic engine tests with `npm run test:game`.
+After applying the gameplay migrations, the rollback-only lease fencing
+regression in [`supabase/tests/global-turn-leases.test.sql`](./supabase/tests/global-turn-leases.test.sql)
+can be run in the Supabase SQL editor. It checks active-lease exclusion,
+expired-lease reclamation, token rotation, idempotent NPC-order retries,
+renewal, and stale-worker write, release, and commit rejection; it rolls back
+all setup changes.
 
 Start the local development server:
 

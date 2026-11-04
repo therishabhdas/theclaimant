@@ -19,7 +19,45 @@ alter table public.world_state
     check (turn_phase in ('planning', 'resolving')),
   add column if not exists planning_deadline_at timestamptz not null
     default (now() + interval '48 hours'),
-  add column if not exists resolution_started_at timestamptz;
+  add column if not exists resolution_started_at timestamptz,
+  add column if not exists resolution_lease_token uuid,
+  add column if not exists resolution_lease_owner text,
+  add column if not exists resolution_lease_expires_at timestamptz,
+  add column if not exists resolution_checkpoint jsonb;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'world_state_resolution_lease_complete_check'
+      and conrelid = 'public.world_state'::regclass
+  ) then
+    alter table public.world_state
+      add constraint world_state_resolution_lease_complete_check
+      check (
+        (resolution_lease_token is null
+          and resolution_lease_owner is null
+          and resolution_lease_expires_at is null)
+        or
+        (resolution_lease_token is not null
+          and resolution_lease_owner is not null
+          and resolution_lease_expires_at is not null)
+      );
+  end if;
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'world_state_resolution_checkpoint_object_check'
+      and conrelid = 'public.world_state'::regclass
+  ) then
+    alter table public.world_state
+      add constraint world_state_resolution_checkpoint_object_check
+      check (
+        resolution_checkpoint is null
+        or jsonb_typeof(resolution_checkpoint) = 'object'
+      );
+  end if;
+end
+$$;
 
 create table if not exists public.playable_character_knowledge (
   character_id smallint not null
@@ -122,17 +160,27 @@ create table if not exists public.gameplay_turn_resolutions (
   unique (world_state_id, gameplay_revision)
 );
 
+create table if not exists public.gameplay_order_rate_limits (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  window_started_at timestamptz not null,
+  request_count integer not null check (request_count > 0),
+  updated_at timestamptz not null default now()
+);
+
 alter table public.gameplay_turn_participants enable row level security;
 alter table public.gameplay_turn_orders enable row level security;
 alter table public.gameplay_npc_orders enable row level security;
 alter table public.gameplay_turn_resolutions enable row level security;
+alter table public.gameplay_order_rate_limits enable row level security;
 
 revoke all on public.gameplay_turn_participants, public.gameplay_turn_orders,
-  public.gameplay_npc_orders, public.gameplay_turn_resolutions
+  public.gameplay_npc_orders, public.gameplay_turn_resolutions,
+  public.gameplay_order_rate_limits
   from anon, authenticated;
 grant select, insert, update, delete
   on public.gameplay_turn_participants, public.gameplay_turn_orders,
-  public.gameplay_npc_orders, public.gameplay_turn_resolutions
+  public.gameplay_npc_orders, public.gameplay_turn_resolutions,
+  public.gameplay_order_rate_limits
   to service_role;
 grant usage, select on sequence
   public.gameplay_turn_orders_id_seq,
@@ -161,6 +209,111 @@ where state.id = 1
   )
 on conflict do nothing;
 
+create or replace function public.preflight_game_order(
+  p_user_id uuid,
+  p_request_id uuid,
+  p_player_request text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  world public.world_state%rowtype;
+  actor_id integer;
+  rate_window_started_at timestamptz;
+  request_count integer;
+  check_time timestamptz;
+  request_limit constant integer := 5;
+  window_duration constant interval := interval '10 minutes';
+begin
+  if p_user_id is null or p_request_id is null
+    or length(trim(coalesce(p_player_request, ''))) = 0
+    or length(p_player_request) > 6000 then
+    raise exception 'GAME_INVALID_REQUEST: User, request ID, and a 1-6000 character order are required.';
+  end if;
+
+  select assignment.character_id into actor_id
+  from public.user_character_assignments as assignment
+  where assignment.user_id = p_user_id;
+  if not found then
+    raise exception 'GAME_NOT_ASSIGNED: The player has no assigned character.';
+  end if;
+
+  select * into world
+  from public.world_state
+  where id = 1
+  for share;
+  if not found then
+    raise exception 'GAME_STATE_MISSING: The world state is not initialized.';
+  end if;
+  check_time := clock_timestamp();
+  if world.turn_phase <> 'planning' or check_time >= world.planning_deadline_at then
+    raise exception 'GAME_TURN_CLOSED: The planning window is closed.';
+  end if;
+  if exists (
+    select 1 from public.gameplay_turn_resolutions as resolution
+    where resolution.world_state_id = 1
+      and resolution.turn_number = world.turn_number + 1
+  ) then
+    raise exception 'GAME_TURN_CLOSED: This world turn has already been resolved.';
+  end if;
+  if not exists (
+    select 1 from public.gameplay_turn_participants as participant
+    where participant.world_state_id = 1
+      and participant.turn_number = world.turn_number + 1
+      and participant.user_id = p_user_id
+      and participant.character_id = actor_id
+  ) then
+    raise exception 'GAME_NOT_ASSIGNED: The character is not a participant in this world turn.';
+  end if;
+  if exists (
+    select 1 from public.gameplay_turn_orders as order_row
+    where order_row.world_state_id = 1
+      and order_row.turn_number = world.turn_number + 1
+      and (order_row.user_id = p_user_id or order_row.request_id = p_request_id)
+  ) then
+    raise exception 'GAME_ALREADY_SUBMITTED: This player already submitted an order for the world turn.';
+  end if;
+
+  insert into public.gameplay_order_rate_limits (
+    user_id, window_started_at, request_count
+  )
+  values (p_user_id, now(), 0)
+  on conflict (user_id) do nothing;
+
+  select limiter.window_started_at, limiter.request_count
+  into rate_window_started_at, request_count
+  from public.gameplay_order_rate_limits as limiter
+  where limiter.user_id = p_user_id
+  for update;
+
+  if rate_window_started_at <= now() - window_duration then
+    rate_window_started_at := now();
+    request_count := 0;
+  end if;
+  if request_count >= request_limit then
+    raise exception 'GAME_RATE_LIMIT: Too many order attempts. Try again in a few minutes.';
+  end if;
+
+  update public.gameplay_order_rate_limits
+  set window_started_at = rate_window_started_at,
+      request_count = request_count + 1,
+      updated_at = now()
+  where user_id = p_user_id;
+
+  return jsonb_build_object(
+    'characterId', actor_id,
+    'turnNumber', world.turn_number + 1,
+    'revision', world.gameplay_revision,
+    'deadlineAt', world.planning_deadline_at,
+    'rateLimit', request_limit,
+    'rateWindowSeconds', extract(epoch from window_duration)::integer
+  );
+end
+$$;
+
 create or replace function public.submit_game_order(
   p_user_id uuid,
   p_character_id integer,
@@ -180,6 +333,7 @@ declare
   existing_order public.gameplay_turn_orders%rowtype;
   submitted_count integer;
   required_count integer;
+  check_time timestamptz;
 begin
   select * into world
   from public.world_state
@@ -188,6 +342,7 @@ begin
   if not found then
     raise exception 'GAME_STATE_MISSING: The world state is not initialized.';
   end if;
+  check_time := clock_timestamp();
 
   select * into existing_order
   from public.gameplay_turn_orders
@@ -221,7 +376,7 @@ begin
   if world.turn_phase <> 'planning' then
     raise exception 'GAME_TURN_CLOSED: The world turn is being resolved.';
   end if;
-  if now() >= world.planning_deadline_at then
+  if check_time >= world.planning_deadline_at then
     raise exception 'GAME_DEADLINE: The order deadline has passed.';
   end if;
   if p_expected_revision is null
@@ -291,7 +446,25 @@ begin
 end
 $$;
 
-create or replace function public.claim_game_turn_resolution()
+drop function if exists public.claim_game_turn_resolution();
+drop function if exists public.save_npc_game_orders(integer, jsonb);
+drop function if exists public.release_game_turn_resolution(integer);
+drop function if exists public.resolve_game_turn(
+  integer, bigint, jsonb, text, text, text
+);
+drop function if exists public.claim_game_turn_resolution(text, integer);
+drop function if exists public.renew_game_turn_resolution(integer, uuid, text, integer);
+drop function if exists public.save_npc_game_orders(integer, uuid, text, jsonb);
+drop function if exists public.save_game_turn_checkpoint(integer, uuid, text, jsonb);
+drop function if exists public.release_game_turn_resolution(integer, uuid, text);
+drop function if exists public.resolve_game_turn(
+  integer, bigint, uuid, text, jsonb, text, text, text
+);
+
+create function public.claim_game_turn_resolution(
+  p_lease_owner text,
+  p_lease_seconds integer default 120
+)
 returns jsonb
 language plpgsql
 security definer
@@ -301,7 +474,17 @@ declare
   world public.world_state%rowtype;
   required_count integer;
   submitted_count integer;
+  lease_token uuid;
+  lease_now timestamptz;
 begin
+  if length(trim(coalesce(p_lease_owner, ''))) = 0
+    or length(p_lease_owner) > 160
+    or p_lease_seconds is null
+    or p_lease_seconds < 30
+    or p_lease_seconds > 300 then
+    raise exception 'GAME_INVALID_REQUEST: A lease owner and duration from 30 to 300 seconds are required.';
+  end if;
+
   select * into world
   from public.world_state
   where id = 1
@@ -316,18 +499,21 @@ begin
   select count(*) into submitted_count
   from public.gameplay_turn_orders
   where world_state_id = 1 and turn_number = world.turn_number + 1;
+  lease_now := clock_timestamp();
 
   if world.turn_phase = 'resolving' then
-    if world.resolution_started_at > now() - interval '10 minutes' then
+    if world.resolution_lease_expires_at is not null
+      and world.resolution_lease_expires_at > lease_now then
       return jsonb_build_object(
         'claimed', false,
         'turnNumber', world.turn_number + 1,
         'phase', world.turn_phase,
-        'deadlineAt', world.planning_deadline_at
+        'deadlineAt', world.planning_deadline_at,
+        'leaseExpiresAt', world.resolution_lease_expires_at
       );
     end if;
   elsif required_count = 0
-    or (submitted_count < required_count and now() < world.planning_deadline_at) then
+    or (submitted_count < required_count and lease_now < world.planning_deadline_at) then
     return jsonb_build_object(
       'claimed', false,
       'turnNumber', world.turn_number + 1,
@@ -338,9 +524,13 @@ begin
     );
   end if;
 
+  lease_token := gen_random_uuid();
   update public.world_state
   set turn_phase = 'resolving',
-      resolution_started_at = now(),
+      resolution_started_at = lease_now,
+      resolution_lease_token = lease_token,
+      resolution_lease_owner = p_lease_owner,
+      resolution_lease_expires_at = lease_now + make_interval(secs => p_lease_seconds),
       updated_at = now()
   where id = 1;
 
@@ -348,13 +538,70 @@ begin
     'claimed', true,
     'turnNumber', world.turn_number + 1,
     'revision', world.gameplay_revision,
-    'deadlineAt', world.planning_deadline_at
+    'deadlineAt', world.planning_deadline_at,
+    'leaseToken', lease_token,
+    'leaseOwner', p_lease_owner,
+    'leaseExpiresAt', lease_now + make_interval(secs => p_lease_seconds),
+    'checkpoint', world.resolution_checkpoint
   );
 end
 $$;
 
-create or replace function public.save_npc_game_orders(
+create function public.renew_game_turn_resolution(
   p_turn_number integer,
+  p_lease_token uuid,
+  p_lease_owner text,
+  p_lease_seconds integer default 120
+)
+returns timestamptz
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  world public.world_state%rowtype;
+  new_expiry timestamptz;
+  lease_now timestamptz;
+begin
+  if p_lease_seconds is null or p_lease_seconds < 30 or p_lease_seconds > 300 then
+    raise exception 'GAME_INVALID_REQUEST: Lease duration must be from 30 to 300 seconds.';
+  end if;
+
+  select * into world
+  from public.world_state
+  where id = 1
+  for update;
+  if not found then
+    raise exception 'GAME_STATE_MISSING: The world state is not initialized.';
+  end if;
+  lease_now := clock_timestamp();
+  if world.turn_phase <> 'resolving'
+    or world.turn_number + 1 <> p_turn_number
+    or world.resolution_lease_token is distinct from p_lease_token
+    or world.resolution_lease_owner is distinct from p_lease_owner
+    or world.resolution_lease_expires_at is null
+    or world.resolution_lease_expires_at <= lease_now then
+    raise exception 'GAME_LEASE_LOST: The resolution lease is expired or belongs to another worker.';
+  end if;
+
+  update public.world_state
+  set resolution_lease_expires_at = lease_now + make_interval(secs => p_lease_seconds),
+      resolution_started_at = lease_now,
+      updated_at = now()
+  where id = 1
+  returning resolution_lease_expires_at into new_expiry;
+
+  if new_expiry is null then
+    raise exception 'GAME_LEASE_LOST: The resolution lease is expired or belongs to another worker.';
+  end if;
+  return new_expiry;
+end
+$$;
+
+create function public.save_npc_game_orders(
+  p_turn_number integer,
+  p_lease_token uuid,
+  p_lease_owner text,
   p_orders jsonb
 )
 returns integer
@@ -369,6 +616,7 @@ declare
   v_action_data jsonb;
   saved_count integer := 0;
   existing_action jsonb;
+  lease_now timestamptz;
 begin
   select * into world
   from public.world_state
@@ -377,9 +625,14 @@ begin
   if not found then
     raise exception 'GAME_STATE_MISSING: The world state is not initialized.';
   end if;
+  lease_now := clock_timestamp();
   if world.turn_phase <> 'resolving'
-    or p_turn_number <> world.turn_number + 1 then
-    raise exception 'GAME_TURN_CLOSED: NPC orders belong to a different world turn.';
+    or p_turn_number <> world.turn_number + 1
+    or world.resolution_lease_token is distinct from p_lease_token
+    or world.resolution_lease_owner is distinct from p_lease_owner
+    or world.resolution_lease_expires_at is null
+    or world.resolution_lease_expires_at <= lease_now then
+    raise exception 'GAME_LEASE_LOST: The NPC-order worker does not hold the active resolution lease.';
   end if;
   if jsonb_typeof(p_orders) is distinct from 'array' then
     raise exception 'GAME_INVALID_REQUEST: NPC orders must be a JSON array.';
@@ -432,28 +685,92 @@ begin
 end
 $$;
 
-create or replace function public.release_game_turn_resolution(
-  p_turn_number integer
+create function public.save_game_turn_checkpoint(
+  p_turn_number integer,
+  p_lease_token uuid,
+  p_lease_owner text,
+  p_checkpoint jsonb
 )
 returns void
 language plpgsql
 security definer
 set search_path = pg_catalog, public
 as $$
+declare
+  world public.world_state%rowtype;
+  lease_now timestamptz;
 begin
-  update public.world_state
-  set turn_phase = 'planning',
-      resolution_started_at = null,
-      updated_at = now()
+  if jsonb_typeof(p_checkpoint) is distinct from 'object' then
+    raise exception 'GAME_INVALID_REQUEST: The resolution checkpoint must be a JSON object.';
+  end if;
+  select * into world
+  from public.world_state
   where id = 1
-    and turn_phase = 'resolving'
-    and turn_number + 1 = p_turn_number;
+  for update;
+  if not found then
+    raise exception 'GAME_STATE_MISSING: The world state is not initialized.';
+  end if;
+  lease_now := clock_timestamp();
+  if world.turn_phase <> 'resolving'
+    or world.turn_number + 1 <> p_turn_number
+    or world.resolution_lease_token is distinct from p_lease_token
+    or world.resolution_lease_owner is distinct from p_lease_owner
+    or world.resolution_lease_expires_at is null
+    or world.resolution_lease_expires_at <= lease_now then
+    raise exception 'GAME_LEASE_LOST: The resolution checkpoint worker does not hold the active lease.';
+  end if;
+  update public.world_state
+  set resolution_checkpoint = p_checkpoint,
+      updated_at = now()
+  where id = 1;
 end
 $$;
 
-create or replace function public.resolve_game_turn(
+create function public.release_game_turn_resolution(
+  p_turn_number integer,
+  p_lease_token uuid,
+  p_lease_owner text
+)
+returns void
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  world public.world_state%rowtype;
+  lease_now timestamptz;
+begin
+  select * into world
+  from public.world_state
+  where id = 1
+  for update;
+  if not found then
+    raise exception 'GAME_STATE_MISSING: The world state is not initialized.';
+  end if;
+  lease_now := clock_timestamp();
+  if world.turn_phase <> 'resolving'
+    or world.turn_number + 1 <> p_turn_number
+    or world.resolution_lease_token is distinct from p_lease_token
+    or world.resolution_lease_owner is distinct from p_lease_owner
+    or world.resolution_lease_expires_at is null
+    or world.resolution_lease_expires_at <= lease_now then
+    raise exception 'GAME_LEASE_LOST: The worker cannot release a lease it no longer owns.';
+  end if;
+  update public.world_state
+  set resolution_started_at = null,
+      resolution_lease_token = null,
+      resolution_lease_owner = null,
+      resolution_lease_expires_at = null,
+      updated_at = now()
+  where id = 1;
+end
+$$;
+
+create function public.resolve_game_turn(
   p_turn_number integer,
   p_expected_revision bigint,
+  p_lease_token uuid,
+  p_lease_owner text,
   p_decisions jsonb,
   p_event_title text,
   p_event_type text,
@@ -466,6 +783,7 @@ set search_path = pg_catalog, public
 as $$
 declare
   world public.world_state%rowtype;
+  existing_resolution public.gameplay_turn_resolutions%rowtype;
   decision_row jsonb;
   actor_id integer;
   decision_status text;
@@ -476,13 +794,27 @@ declare
   outcome_data jsonb := '[]'::jsonb;
   required_count integer;
   provided_count integer;
-  first_user_id uuid;
-  first_character_id integer;
   event_id bigint;
   resolution_id bigint;
   request_id uuid;
   order_message text;
+  lease_now timestamptz;
 begin
+  select * into existing_resolution
+  from public.gameplay_turn_resolutions
+  where world_state_id = 1
+    and turn_number = p_turn_number;
+  if found then
+    return jsonb_build_object(
+      'status', 'resolved',
+      'resolvedTurn', existing_resolution.turn_number,
+      'revision', existing_resolution.gameplay_revision,
+      'eventId', existing_resolution.event_id,
+      'resolutionId', existing_resolution.id,
+      'idempotent', true
+    );
+  end if;
+
   select * into world
   from public.world_state
   where id = 1
@@ -490,9 +822,14 @@ begin
   if not found then
     raise exception 'GAME_STATE_MISSING: The world state is not initialized.';
   end if;
+  lease_now := clock_timestamp();
   if world.turn_phase <> 'resolving'
-    or p_turn_number <> world.turn_number + 1 then
-    raise exception 'GAME_TURN_CLOSED: The world turn is not being resolved.';
+    or p_turn_number <> world.turn_number + 1
+    or world.resolution_lease_token is distinct from p_lease_token
+    or world.resolution_lease_owner is distinct from p_lease_owner
+    or world.resolution_lease_expires_at is null
+    or world.resolution_lease_expires_at <= lease_now then
+    raise exception 'GAME_LEASE_LOST: The worker does not hold the active lease for this turn.';
   end if;
   if p_expected_revision is null
     or world.gameplay_revision <> p_expected_revision then
@@ -512,7 +849,7 @@ begin
     raise exception 'GAME_INVALID_REQUEST: World-turn decisions must be a JSON array.';
   end if;
 
-  if now() >= world.planning_deadline_at then
+  if lease_now >= world.planning_deadline_at then
     insert into public.gameplay_turn_orders (
       request_id, world_state_id, turn_number, user_id, character_id,
       player_request, action_data, resolution_status, resolution_note
@@ -678,21 +1015,19 @@ begin
   ) as accepted;
   committed_actions := coalesce(committed_actions, '[]'::jsonb);
 
-  select participant.user_id, participant.character_id
-  into first_user_id, first_character_id
-  from public.gameplay_turn_participants as participant
-  where participant.world_state_id = 1
-    and participant.turn_number = p_turn_number
-  order by participant.character_id
-  limit 1;
-  if first_user_id is null or first_character_id is null then
+  if not exists (
+    select 1
+    from public.gameplay_turn_participants as participant
+    where participant.world_state_id = 1
+      and participant.turn_number = p_turn_number
+  ) then
     raise exception 'GAME_INVALID_REQUEST: A shared world turn requires at least one player.';
   end if;
   request_id := md5('global-turn-resolution:' || p_turn_number)::uuid;
 
   resolution_result := public.commit_game_turn(
-    first_user_id,
-    first_character_id,
+    null,
+    null,
     request_id,
     p_expected_revision,
     'Shared global world turn ' || p_turn_number || ' resolution.',
@@ -719,6 +1054,10 @@ begin
   set turn_phase = 'planning',
       planning_deadline_at = now() + interval '48 hours',
       resolution_started_at = null,
+      resolution_lease_token = null,
+      resolution_lease_owner = null,
+      resolution_lease_expires_at = null,
+      resolution_checkpoint = null,
       updated_at = now()
   where id = 1
   returning * into world;
@@ -756,23 +1095,39 @@ $$;
 revoke all on function public.submit_game_order(
   uuid, integer, uuid, bigint, text, jsonb
 ) from public, anon, authenticated;
-revoke all on function public.claim_game_turn_resolution() from public, anon, authenticated;
-revoke all on function public.save_npc_game_orders(integer, jsonb)
+revoke all on function public.preflight_game_order(uuid, uuid, text)
   from public, anon, authenticated;
-revoke all on function public.release_game_turn_resolution(integer)
+revoke all on function public.claim_game_turn_resolution(text, integer)
+  from public, anon, authenticated;
+revoke all on function public.renew_game_turn_resolution(integer, uuid, text, integer)
+  from public, anon, authenticated;
+revoke all on function public.save_npc_game_orders(integer, uuid, text, jsonb)
+  from public, anon, authenticated;
+revoke all on function public.save_game_turn_checkpoint(integer, uuid, text, jsonb)
+  from public, anon, authenticated;
+revoke all on function public.release_game_turn_resolution(integer, uuid, text)
   from public, anon, authenticated;
 revoke all on function public.resolve_game_turn(
-  integer, bigint, jsonb, text, text, text
+  integer, bigint, uuid, text, jsonb, text, text, text
 ) from public, anon, authenticated;
 
 grant execute on function public.submit_game_order(
   uuid, integer, uuid, bigint, text, jsonb
 ) to service_role;
-grant execute on function public.claim_game_turn_resolution() to service_role;
-grant execute on function public.save_npc_game_orders(integer, jsonb) to service_role;
-grant execute on function public.release_game_turn_resolution(integer) to service_role;
+grant execute on function public.preflight_game_order(uuid, uuid, text)
+  to service_role;
+grant execute on function public.claim_game_turn_resolution(text, integer)
+  to service_role;
+grant execute on function public.renew_game_turn_resolution(integer, uuid, text, integer)
+  to service_role;
+grant execute on function public.save_npc_game_orders(integer, uuid, text, jsonb)
+  to service_role;
+grant execute on function public.save_game_turn_checkpoint(integer, uuid, text, jsonb)
+  to service_role;
+grant execute on function public.release_game_turn_resolution(integer, uuid, text)
+  to service_role;
 grant execute on function public.resolve_game_turn(
-  integer, bigint, jsonb, text, text, text
+  integer, bigint, uuid, text, jsonb, text, text, text
 ) to service_role;
 
 commit;

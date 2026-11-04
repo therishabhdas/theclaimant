@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:game": "node --experimental-strip-types --test lib/game/engine.test.mjs lib/game/knowledge.test.mjs"
+    "test:game": "node --experimental-strip-types --test lib/game/engine.test.mjs lib/game/knowledge.test.mjs lib/game/worker-auth.test.mjs",
+    "worker:game-turns": "node scripts/game-turn-worker.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
