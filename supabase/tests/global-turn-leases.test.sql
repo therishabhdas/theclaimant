@@ -12,6 +12,28 @@ declare
   saved_count integer;
   npc_action jsonb;
 begin
+  if exists (
+    select required.column_name
+    from (values
+      ('turn_phase'),
+      ('resolution_started_at'),
+      ('resolution_lease_token'),
+      ('resolution_lease_owner'),
+      ('resolution_lease_expires_at'),
+      ('resolution_checkpoint')
+    ) as required(column_name)
+    where not exists (
+      select 1
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'world_state'
+        and column_name = required.column_name
+    )
+  ) then
+    raise exception
+      'The global turn lease schema is missing. Run the latest supabase/global-turn-cycle.sql, then rerun this test.';
+  end if;
+
   select * into world
   from public.world_state
   where id = 1;
