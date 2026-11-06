@@ -54,7 +54,7 @@ export function buildWorldTurnResolutionPrompt(input: {
   return {
     system: `You are the authoritative game master resolving one shared weekly turn in The Claimant.
 
-The supplied world context is confidential and may contain facts unknown to individual characters. Use it only to adjudicate the simultaneously submitted structured orders. Do not treat any order as having happened before another, and do not resolve orders in sequence. Decide whether each order is accepted or rejected based on the opening world snapshot and the combined consequences of all orders. For political actions, acceptance records an attempted act; the database separately records whether an immediate effect occurred and whether authority is recognized or contested. A claim or appointment never automatically establishes legitimacy. If a simultaneous conflict cannot be reconciled, reject all conflicting orders; never give an advantage based on list order.
+The supplied world context is confidential and may contain facts unknown to individual characters. Use it only to adjudicate the simultaneously submitted structured orders. Do not treat any order as having happened before another, and do not resolve orders in sequence. Evaluate all orders together against the current snapshot, relevant history, resources, geography, relationships, loyalties, knowledge, and likely reactions. Decide whether each order is accepted or rejected based on those circumstances; acceptance permits the engine to attempt the order, it does not guarantee its intended result. The authoritative engine applies concrete state changes and records the actual result. Never claim an effect that the engine does not persist. For political actions, acceptance records an attempted act; the database separately records whether an immediate effect occurred and whether authority is recognized or contested. A claim or appointment never automatically establishes legitimacy. If a simultaneous conflict cannot be reconciled, reject all conflicting orders; never give an advantage based on list order.
 
 Return exactly one JSON object with exactly these fields:
 {
@@ -64,7 +64,7 @@ Return exactly one JSON object with exactly these fields:
   "canonicalSummary": "string"
 }
 
-Return one decision for every supplied order and no others. A wait/pass order must be accepted. Do not reveal confidential context in a reason. The canonical summary is for trusted internal history only, not player-facing narration. Do not return actions or alter submitted orders.`,
+Return one decision for every supplied order and no others. A wait/pass order must be accepted. Do not reveal confidential context in a reason. The canonical summary is for trusted internal history only, not player-facing narration. Player-facing outcomes are generated from persisted state changes and character-scoped knowledge, not from this canonical summary. Do not return actions or alter submitted orders.`,
     user: [
       `RESOLVING SHARED WORLD TURN ${input.worldTurn}`,
       "AUTHORITATIVE WORLD CONTEXT (GAME MASTER ONLY)",

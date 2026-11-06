@@ -137,8 +137,14 @@ progression, and private gameplay-turn and muster-order records. Then run
 [`supabase/global-turn-cycle.sql`](./supabase/global-turn-cycle.sql). It adds
 the shared planning and resolution phases, one order per assigned player for
 each global turn, AI order storage for unassigned characters, and the atomic
-weekly resolution procedure. Run both after the world-state, opening-state,
-and travel migrations.
+weekly resolution procedure. Each resolved order persists its original action,
+adjudication, execution status, character-scoped result, and only the state
+changes relevant to that character. These private outcomes are available to
+the assigned player on the shared-turn panel; the world event remains a
+separate public/character-knowledge projection. The AI adjudicates the full
+simultaneous world context, but accepted orders are still attempts: actual
+effects and the canonical turn summary are derived from committed state
+changes. Run both after the world-state, opening-state, and travel migrations.
 
 After both gameplay scripts, run
 [`supabase/political-authority.sql`](./supabase/political-authority.sql).
@@ -296,6 +302,11 @@ The rollback-only
 [`supabase/tests/political-authority.test.sql`](./supabase/tests/political-authority.test.sql)
 regression checks an accepted claim, contested authority, persisted
 political outcomes, and the 40-character/30-location catalogue invariant.
+The rollback-only
+[`supabase/tests/player-specific-outcomes.test.sql`](./supabase/tests/player-specific-outcomes.test.sql)
+regression resolves a shared pass turn and checks that every player and NPC
+receives a persisted outcome while private details remain inaccessible to
+authenticated database clients.
 
 Start the local development server:
 

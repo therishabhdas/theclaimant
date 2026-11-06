@@ -2,10 +2,25 @@
 
 import { useCallback, useState } from "react";
 import type { FormEvent } from "react";
-import type { PlayerTurnStatus } from "../../lib/game/turn-service";
+import type {
+  PlayerActionOutcome,
+  PlayerTurnStatus,
+} from "../../lib/game/turn-service";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isDecisionStatus(value: unknown): value is PlayerActionOutcome["decisionStatus"] {
+  return value === "accepted" || value === "rejected" || value === "pass";
+}
+
+function isExecutionStatus(value: unknown): value is PlayerActionOutcome["executionStatus"] {
+  return value === "not_attempted" ||
+    value === "attempted" ||
+    value === "executed" ||
+    value === "partially_executed" ||
+    value === "failed";
 }
 
 function parseTurnStatus(value: unknown): PlayerTurnStatus {
@@ -18,9 +33,46 @@ function parseTurnStatus(value: unknown): PlayerTurnStatus {
     Number.isNaN(Date.parse(value.deadlineAt)) ||
     typeof value.participating !== "boolean" ||
     typeof value.ownOrderStatus !== "string" ||
-    !(typeof value.previousTurnStatus === "string" || value.previousTurnStatus === null)
+    !(typeof value.previousTurnStatus === "string" || value.previousTurnStatus === null) ||
+    !(value.latestOutcome === null || isRecord(value.latestOutcome))
   ) {
     throw new Error("The turn status response was incomplete. Refresh and try again.");
+  }
+
+  let latestOutcome: PlayerActionOutcome | null = null;
+  if (isRecord(value.latestOutcome)) {
+    const outcome = value.latestOutcome;
+    if (
+      typeof outcome.turnNumber !== "number" ||
+      !Number.isInteger(outcome.turnNumber) ||
+      !isRecord(outcome.originalOrder) ||
+      !isDecisionStatus(outcome.decisionStatus) ||
+      !isExecutionStatus(outcome.executionStatus) ||
+      typeof outcome.summary !== "string" ||
+      !Array.isArray(outcome.stateChanges)
+    ) {
+      throw new Error("The player's action outcome is invalid. Refresh and try again.");
+    }
+    latestOutcome = {
+      turnNumber: outcome.turnNumber,
+      originalOrder: outcome.originalOrder,
+      decisionStatus: outcome.decisionStatus,
+      executionStatus: outcome.executionStatus,
+      summary: outcome.summary,
+      stateChanges: outcome.stateChanges.map((change) => {
+        if (
+          !isRecord(change) ||
+          typeof change.changeType !== "string" ||
+          typeof change.description !== "string"
+        ) {
+          throw new Error("The player's action changes are invalid. Refresh and try again.");
+        }
+        return {
+          changeType: change.changeType,
+          description: change.description,
+        };
+      }),
+    };
   }
 
   return {
@@ -30,6 +82,7 @@ function parseTurnStatus(value: unknown): PlayerTurnStatus {
     participating: value.participating,
     ownOrderStatus: value.ownOrderStatus,
     previousTurnStatus: value.previousTurnStatus,
+    latestOutcome,
   };
 }
 
@@ -63,6 +116,10 @@ function orderStatusLabel(status: string) {
     default:
       return status.replaceAll("_", " ");
   }
+}
+
+function executionStatusLabel(status: PlayerActionOutcome["executionStatus"]) {
+  return status.replaceAll("_", " ");
 }
 
 function formatDeadline(deadlineAt: string) {
@@ -196,6 +253,27 @@ export default function WorldTurnPanel({
             <p className="world-turn-previous">
               Previous turn: {orderStatusLabel(status.previousTurnStatus)}.
             </p>
+          )}
+          {status.latestOutcome && (
+            <section className="world-turn-outcome" aria-label="Your latest resolved action">
+              <p className="eyebrow">YOUR LAST RESOLVED OUTCOME · TURN {status.latestOutcome.turnNumber}</p>
+              <strong>
+                {orderStatusLabel(status.latestOutcome.decisionStatus)} ·{" "}
+                {executionStatusLabel(status.latestOutcome.executionStatus)}
+              </strong>
+              <p>{status.latestOutcome.summary}</p>
+              {status.latestOutcome.stateChanges.length > 0 && (
+                <ul>
+                  {status.latestOutcome.stateChanges.map((change, index) => (
+                    <li key={`${change.changeType}-${index}`}>{change.description}</li>
+                  ))}
+                </ul>
+              )}
+              <details>
+                <summary>Your original order</summary>
+                <pre>{JSON.stringify(status.latestOutcome.originalOrder, null, 2)}</pre>
+              </details>
+            </section>
           )}
 
           {canSubmit ? (

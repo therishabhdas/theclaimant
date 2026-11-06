@@ -160,6 +160,31 @@ create table if not exists public.gameplay_turn_resolutions (
   unique (world_state_id, gameplay_revision)
 );
 
+create table if not exists public.gameplay_order_outcomes (
+  id bigint generated always as identity primary key,
+  world_state_id smallint not null default 1
+    references public.world_state(id) on delete restrict,
+  turn_number integer not null check (turn_number > 0),
+  actor_character_id integer not null
+    references public.playable_characters(id) on delete restrict,
+  original_order jsonb not null check (jsonb_typeof(original_order) = 'object'),
+  decision_status text not null
+    check (decision_status in ('accepted', 'rejected', 'pass')),
+  execution_status text not null
+    check (execution_status in (
+      'not_attempted', 'attempted', 'executed', 'partially_executed', 'failed'
+    )),
+  adjudication_reason text not null,
+  outcome_summary text not null,
+  state_changes jsonb not null default '[]'::jsonb
+    check (jsonb_typeof(state_changes) = 'array'),
+  character_knowledge jsonb not null default '{}'::jsonb
+    check (jsonb_typeof(character_knowledge) = 'object'),
+  event_id bigint not null references public.game_events(id) on delete restrict,
+  resolved_at timestamptz not null default now(),
+  unique (world_state_id, turn_number, actor_character_id)
+);
+
 create table if not exists public.gameplay_order_rate_limits (
   user_id uuid primary key references auth.users(id) on delete cascade,
   window_started_at timestamptz not null,
@@ -171,20 +196,25 @@ alter table public.gameplay_turn_participants enable row level security;
 alter table public.gameplay_turn_orders enable row level security;
 alter table public.gameplay_npc_orders enable row level security;
 alter table public.gameplay_turn_resolutions enable row level security;
+alter table public.gameplay_order_outcomes enable row level security;
 alter table public.gameplay_order_rate_limits enable row level security;
 
+revoke all on public.gameplay_order_outcomes from public, anon, authenticated;
 revoke all on public.gameplay_turn_participants, public.gameplay_turn_orders,
   public.gameplay_npc_orders, public.gameplay_turn_resolutions,
+  public.gameplay_order_outcomes,
   public.gameplay_order_rate_limits
   from anon, authenticated;
 grant select, insert, update, delete
   on public.gameplay_turn_participants, public.gameplay_turn_orders,
   public.gameplay_npc_orders, public.gameplay_turn_resolutions,
+  public.gameplay_order_outcomes,
   public.gameplay_order_rate_limits
   to service_role;
 grant usage, select on sequence
   public.gameplay_turn_orders_id_seq,
-  public.gameplay_turn_resolutions_id_seq
+  public.gameplay_turn_resolutions_id_seq,
+  public.gameplay_order_outcomes_id_seq
   to service_role;
 
 insert into public.gameplay_turn_participants (
@@ -792,6 +822,17 @@ declare
   committed_actions jsonb;
   resolution_result jsonb;
   outcome_data jsonb := '[]'::jsonb;
+  outcome_row jsonb;
+  original_action jsonb;
+  event_state_changes jsonb;
+  actor_state_changes jsonb;
+  outcome_summary text;
+  resolved_summary text;
+  execution_status text;
+  action_executed boolean;
+  actor_house_id bigint;
+  resolved_outcome_data jsonb := '[]'::jsonb;
+  political_outcome record;
   required_count integer;
   provided_count integer;
   event_id bigint;
@@ -993,7 +1034,8 @@ begin
     outcome_data := outcome_data || jsonb_build_array(jsonb_build_object(
       'actorCharacterId', actor_id,
       'decision', decision_status,
-      'reason', decision_row ->> 'reason'
+      'reason', decision_row ->> 'reason',
+      'action', action_data -> 0
     ));
     action_data := null;
   end loop;
@@ -1041,6 +1083,12 @@ begin
     committed_actions
   );
   event_id := (resolution_result ->> 'eventId')::bigint;
+  select event.state_changes into event_state_changes
+  from public.game_events as event
+  where event.id = event_id;
+  if event_state_changes is null then
+    raise exception 'GAME_RESOLUTION_FAILED: The committed event has no authoritative state changes.';
+  end if;
 
   insert into public.gameplay_turn_resolutions (
     world_state_id, turn_number, gameplay_revision,
@@ -1051,6 +1099,223 @@ begin
     event_id, p_canonical_summary, outcome_data
   )
   returning id into resolution_id;
+
+  for outcome_row in
+    select item.value from jsonb_array_elements(outcome_data) as item(value)
+  loop
+    actor_id := (outcome_row ->> 'actorCharacterId')::integer;
+    original_action := outcome_row -> 'action';
+    decision_status := outcome_row ->> 'decision';
+    actor_state_changes := '[]'::jsonb;
+    action_executed := false;
+
+    if decision_status = 'pass' then
+      execution_status := 'not_attempted';
+      outcome_summary := 'No action was taken during this world turn.';
+      select coalesce(jsonb_agg(change.value order by change.ordinality), '[]'::jsonb)
+      into actor_state_changes
+      from jsonb_array_elements(event_state_changes)
+        with ordinality as change(value, ordinality)
+      where change.value #>> '{target,type}' = 'character'
+        and change.value #>> '{target,id}' = actor_id::text;
+    elsif decision_status = 'rejected' then
+      execution_status := 'failed';
+      outcome_summary := 'The order was not carried out during this world turn.';
+      select coalesce(jsonb_agg(change.value order by change.ordinality), '[]'::jsonb)
+      into actor_state_changes
+      from jsonb_array_elements(event_state_changes)
+        with ordinality as change(value, ordinality)
+      where change.value #>> '{target,type}' = 'character'
+        and change.value #>> '{target,id}' = actor_id::text;
+    elsif original_action ->> 'type' = 'political_action' then
+      select political.execution_status, political.consequence
+      into political_outcome
+      from public.political_action_outcomes as political
+      where political.world_state_id = 1
+        and political.turn_number = p_turn_number
+        and political.actor_character_id = actor_id;
+
+      if found then
+        execution_status := political_outcome.execution_status;
+        action_executed := political_outcome.execution_status = 'executed';
+        outcome_summary := political_outcome.consequence;
+        actor_state_changes := jsonb_build_array(jsonb_build_object(
+          'changeType', 'political_action_outcome',
+          'description', political_outcome.consequence,
+          'structuredChange', jsonb_build_object(
+            'executionStatus', political_outcome.execution_status,
+            'authorityStatus', political_outcome.authority_status
+          )
+        ));
+      else
+        execution_status := 'attempted';
+        outcome_summary :=
+          'The order was accepted as an attempt; no political outcome was recorded.';
+      end if;
+    else
+      select coalesce(character.current_house_id, character.starting_house_id)
+      into actor_house_id
+      from public.playable_characters as character
+      where character.id = actor_id;
+
+      select coalesce(jsonb_agg(change.value order by change.ordinality), '[]'::jsonb)
+      into actor_state_changes
+      from jsonb_array_elements(event_state_changes)
+        with ordinality as change(value, ordinality)
+      where (
+        change.value #>> '{target,type}' = 'character'
+        and change.value #>> '{target,id}' = actor_id::text
+      ) or (
+        original_action ->> 'type' = 'muster'
+        and change.value ->> 'changeType' = 'military_muster_ordered'
+        and change.value #>> '{target,id}' = actor_house_id::text
+        and change.value #>> '{structuredChange,region_id}' = original_action ->> 'regionId'
+        and change.value #>> '{structuredChange,force_size}' = original_action ->> 'forceSize'
+      ) or (
+        original_action ->> 'type' = 'muster'
+        and change.value ->> 'changeType' = 'muster_completed'
+        and change.value #>> '{target,id}' = actor_house_id::text
+        and change.value #>> '{structuredChange,force_size}' = original_action ->> 'forceSize'
+        and exists (
+          select 1
+          from public.game_muster_orders as muster
+          where muster.id =
+            (change.value #>> '{structuredChange,muster_order_id}')::bigint
+            and muster.requested_by_character_id = actor_id
+            and muster.region_id = (original_action ->> 'regionId')::smallint
+        )
+      ) or (
+        original_action ->> 'type' = 'diplomacy_propose'
+        and change.value ->> 'changeType' = 'diplomacy_proposed'
+        and change.value #>> '{structuredChange,relation_type}' = original_action ->> 'relationType'
+        and change.value #>> '{structuredChange,house_a_id}' = actor_house_id::text
+        and change.value #>> '{structuredChange,house_b_id}' = original_action ->> 'targetHouseId'
+      ) or (
+        original_action ->> 'type' = 'diplomacy_resolve'
+        and change.value ->> 'changeType' = 'diplomacy_resolved'
+        and change.value #>> '{target,id}' = original_action ->> 'diplomacyRecordId'
+      ) or (
+        original_action ->> 'type' = 'war_declare'
+        and change.value ->> 'changeType' = 'war_declared'
+        and change.value #>> '{structuredChange,house_a_id}' = actor_house_id::text
+        and change.value #>> '{structuredChange,house_b_id}' = original_action ->> 'targetHouseId'
+      ) or (
+        original_action ->> 'type' = 'war_join'
+        and change.value ->> 'changeType' = 'war_joined'
+        and change.value #>> '{target,id}' = original_action ->> 'warId'
+        and change.value #>> '{structuredChange,house_id}' = actor_house_id::text
+      );
+
+      select coalesce(
+        nullif(string_agg(change.value ->> 'description', ' '), ''),
+        'The order was accepted as an attempt, but no resulting state change was recorded.'
+      )
+      into outcome_summary
+      from jsonb_array_elements(actor_state_changes) as change(value);
+      action_executed := case original_action ->> 'type'
+        when 'move' then exists (
+          select 1 from jsonb_array_elements(actor_state_changes) as change(value)
+          where change.value ->> 'changeType' = 'travel_departure'
+            and change.value #>> '{target,id}' = actor_id::text
+        )
+        when 'muster' then exists (
+          select 1 from jsonb_array_elements(actor_state_changes) as change(value)
+          where change.value ->> 'changeType' = 'military_muster_ordered'
+            and change.value #>> '{structuredChange,region_id}' = original_action ->> 'regionId'
+            and change.value #>> '{structuredChange,force_size}' = original_action ->> 'forceSize'
+        )
+        when 'diplomacy_propose' then exists (
+          select 1 from jsonb_array_elements(actor_state_changes) as change(value)
+          where change.value ->> 'changeType' = 'diplomacy_proposed'
+            and change.value #>> '{structuredChange,relation_type}' = original_action ->> 'relationType'
+            and change.value #>> '{structuredChange,house_b_id}' = original_action ->> 'targetHouseId'
+        )
+        when 'diplomacy_resolve' then exists (
+          select 1 from jsonb_array_elements(actor_state_changes) as change(value)
+          where change.value ->> 'changeType' = 'diplomacy_resolved'
+            and change.value #>> '{target,id}' = original_action ->> 'diplomacyRecordId'
+        )
+        when 'war_declare' then exists (
+          select 1 from jsonb_array_elements(actor_state_changes) as change(value)
+          where change.value ->> 'changeType' = 'war_declared'
+            and change.value #>> '{structuredChange,house_b_id}' = original_action ->> 'targetHouseId'
+        )
+        when 'war_join' then exists (
+          select 1 from jsonb_array_elements(actor_state_changes) as change(value)
+          where change.value ->> 'changeType' = 'war_joined'
+            and change.value #>> '{target,id}' = original_action ->> 'warId'
+        )
+        else false
+      end;
+      execution_status := case when action_executed then 'executed' else 'attempted' end;
+    end if;
+
+    insert into public.gameplay_order_outcomes (
+      world_state_id, turn_number, actor_character_id, original_order,
+      decision_status, execution_status, adjudication_reason,
+      outcome_summary, state_changes, character_knowledge, event_id
+    )
+    values (
+      1, p_turn_number, actor_id, original_action,
+      decision_status, execution_status,
+      outcome_row ->> 'reason', outcome_summary, actor_state_changes,
+      jsonb_build_object(
+        'summary', outcome_summary,
+        'stateChanges', actor_state_changes
+      ),
+      event_id
+    );
+
+    resolved_outcome_data := resolved_outcome_data || jsonb_build_array(
+      jsonb_build_object(
+        'actorCharacterId', actor_id,
+        'decision', decision_status,
+        'reason', outcome_row ->> 'reason',
+        'action', original_action,
+        'executionStatus', execution_status,
+        'outcomeSummary', outcome_summary,
+        'stateChanges', actor_state_changes
+      )
+    );
+
+    update public.game_events
+    set character_knowledge = jsonb_set(
+      character_knowledge,
+      array[actor_id::text],
+      to_jsonb(outcome_summary),
+      true
+    )
+    where id = event_id;
+  end loop;
+
+  update public.gameplay_turn_resolutions
+  set resolution_data = resolved_outcome_data
+  where id = resolution_id;
+
+  select left(
+    'Shared world turn ' || p_turn_number || ' resolved. ' ||
+    coalesce(
+      string_agg(
+        character.display_name || ': ' || outcome.outcome_summary,
+        ' ' order by outcome.actor_character_id
+      ),
+      'No character actions were recorded.'
+    ),
+    4000
+  )
+  into resolved_summary
+  from public.gameplay_order_outcomes as outcome
+  join public.playable_characters as character
+    on character.id = outcome.actor_character_id
+  where outcome.world_state_id = 1
+    and outcome.turn_number = p_turn_number;
+
+  update public.gameplay_turn_resolutions
+  set canonical_summary = resolved_summary
+  where id = resolution_id;
+  update public.game_events
+  set canonical_summary = resolved_summary
+  where id = event_id;
 
   update public.world_state
   set turn_phase = 'planning',

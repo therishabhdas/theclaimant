@@ -104,6 +104,18 @@ const tableDefinitions: TableDefinition[] = [
     ],
   },
   {
+    name: "gameplay_order_outcomes",
+    group: "Private game state",
+    hideRowCount: true,
+    columns: [
+      "id bigint PK", "world_state_id smallint FK", "turn_number integer",
+      "actor_character_id integer FK", "original_order jsonb",
+      "decision_status text", "execution_status text",
+      "adjudication_reason text", "outcome_summary text", "state_changes jsonb",
+      "character_knowledge jsonb", "event_id bigint FK", "resolved_at timestamptz",
+    ],
+  },
+  {
     name: "user_character_assignments",
     group: "Private game state",
     hideRowCount: true,

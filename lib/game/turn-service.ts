@@ -49,7 +49,38 @@ export type PlayerTurnStatus = {
   participating: boolean;
   ownOrderStatus: string;
   previousTurnStatus: string | null;
+  latestOutcome: PlayerActionOutcome | null;
 };
+
+export type PlayerActionOutcome = {
+  turnNumber: number;
+  originalOrder: Record<string, unknown>;
+  decisionStatus: "accepted" | "rejected" | "pass";
+  executionStatus:
+    | "not_attempted"
+    | "attempted"
+    | "executed"
+    | "partially_executed"
+    | "failed";
+  summary: string;
+  stateChanges: { changeType: string; description: string }[];
+};
+
+function isOrderDecisionStatus(
+  value: string,
+): value is PlayerActionOutcome["decisionStatus"] {
+  return value === "accepted" || value === "rejected" || value === "pass";
+}
+
+function isOrderExecutionStatus(
+  value: string,
+): value is PlayerActionOutcome["executionStatus"] {
+  return value === "not_attempted" ||
+    value === "attempted" ||
+    value === "executed" ||
+    value === "partially_executed" ||
+    value === "failed";
+}
 
 export class StaleGameStateError extends Error {
   constructor() {
@@ -997,7 +1028,7 @@ export async function getPlayerTurnStatus(userId: string): Promise<PlayerTurnSta
   const world = stateRows[0];
   const completedTurn = numberField(world, "turn_number", "world state");
   const turnNumber = completedTurn + 1;
-  const [participantRows, currentRows, previousRows] = await Promise.all([
+  const [participantRows, currentRows, previousRows, outcomeRows] = await Promise.all([
     readRows(client.from("gameplay_turn_participants")
       .select("character_id")
       .eq("world_state_id", 1)
@@ -1016,11 +1047,61 @@ export async function getPlayerTurnStatus(userId: string): Promise<PlayerTurnSta
           .eq("turn_number", completedTurn)
           .eq("user_id", userId), "the player's previous order")
       : Promise.resolve([]),
+    completedTurn > 0
+      ? readRows(client.from("gameplay_order_outcomes")
+          .select(
+            "turn_number, original_order, decision_status, execution_status, " +
+            "outcome_summary, state_changes",
+          )
+          .eq("world_state_id", 1)
+          .eq("actor_character_id", characterId)
+          .lte("turn_number", completedTurn)
+          .order("turn_number", { ascending: false })
+          .limit(1), "the player's latest action outcome")
+      : Promise.resolve([]),
   ]);
   const participating = participantRows.length === 1;
   const phase = stringField(world, "turn_phase", "world state");
   if (phase !== "planning" && phase !== "resolving") {
     throw new Error("The world state has an unsupported turn phase.");
+  }
+  let latestOutcome: PlayerActionOutcome | null = null;
+  if (outcomeRows.length > 0) {
+    const outcome = outcomeRows[0];
+    const decisionStatus = stringField(
+      outcome,
+      "decision_status",
+      "player action outcome",
+    );
+    const executionStatus = stringField(
+      outcome,
+      "execution_status",
+      "player action outcome",
+    );
+    const rawStateChanges = outcome.state_changes;
+    if (!Array.isArray(rawStateChanges)) {
+      throw new Error("The player's action outcome has invalid state changes.");
+    }
+    if (!isOrderDecisionStatus(decisionStatus)) {
+      throw new Error("The player's action outcome has an unsupported decision status.");
+    }
+    if (!isOrderExecutionStatus(executionStatus)) {
+      throw new Error("The player's action outcome has an unsupported execution status.");
+    }
+    latestOutcome = {
+      turnNumber: numberField(outcome, "turn_number", "player action outcome"),
+      originalOrder: objectField(outcome.original_order, "player's original order"),
+      decisionStatus,
+      executionStatus,
+      summary: stringField(outcome, "outcome_summary", "player action outcome"),
+      stateChanges: rawStateChanges.map((change) => {
+        const row = objectField(change, "player action state change");
+        return {
+          changeType: stringField(row, "changeType", "player action state change"),
+          description: stringField(row, "description", "player action state change"),
+        };
+      }),
+    };
   }
   return {
     turnNumber,
@@ -1035,5 +1116,6 @@ export async function getPlayerTurnStatus(userId: string): Promise<PlayerTurnSta
     previousTurnStatus: previousRows.length > 0
       ? stringField(previousRows[0], "resolution_status", "previous player order")
       : null,
+    latestOutcome,
   };
 }
