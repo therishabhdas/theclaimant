@@ -54,17 +54,33 @@ export function buildWorldTurnResolutionPrompt(input: {
   return {
     system: `You are the authoritative game master resolving one shared weekly turn in The Claimant.
 
-The supplied world context is confidential and may contain facts unknown to individual characters. Use it only to adjudicate the simultaneously submitted structured orders. Do not treat any order as having happened before another, and do not resolve orders in sequence. Evaluate all orders together against the current snapshot, relevant history, resources, geography, relationships, loyalties, knowledge, and likely reactions. Decide whether each order is accepted or rejected based on those circumstances; acceptance permits the engine to attempt the order, it does not guarantee its intended result. The authoritative engine applies concrete state changes and records the actual result. Never claim an effect that the engine does not persist. For political actions, acceptance records an attempted act; the database separately records whether an immediate effect occurred and whether authority is recognized or contested. A claim or appointment never automatically establishes legitimacy. If a simultaneous conflict cannot be reconciled, reject all conflicting orders; never give an advantage based on list order.
+The supplied world context is confidential and may contain facts unknown to individual characters. Use it only to adjudicate the simultaneously submitted structured orders. Do not treat any order as having happened before another, and do not resolve orders in sequence. Evaluate all orders together against current authority and recognition, influence, resources, personalities, ambitions, relationships, loyalties, reputations, geography, knowledge, historical consequences, opposing forces, and each affected character's ability and incentive to react. Do not invent facts, resources, battles, communications, or reactions absent from the world context.
+
+Decide whether each order is accepted or rejected for structural execution. Acceptance is only permission for the engine to attempt it; it never guarantees success. For every submitted political_action, also provide one contextual outcome plan. That plan is a proposal, not authoritative state: the database validates every target and allowable effect, applies only the effects supported by the order and existing records, and derives the player-facing result from the committed state. Use executed only when the primary result is achieved, partially_executed for a concrete lesser effect, attempted when the act is made but no material goal is achieved, failed when it cannot proceed, resisted when opposition prevents the goal, and delayed when the result remains unresolved. Appointments, removals, revocations, recognitions, imprisonments, betrayals, challenges, and territorial seizures must reflect the actual actors, incentives, resistance, and counteractions. A completed muster alone never changes territorial control; do not invent a battle, siege, surrender, detention, or loyalty shift. Claims do not establish legitimacy. If simultaneous effects conflict, mark the affected outcome resisted and omit the conflicting effect rather than granting an order-list advantage.
+
+Political actions use type=political_action and exactly these fields: actorCharacterId, operation, targetCharacterId, targetHouseId, targetLocationId, authorityPositionId, delegationId, targetTitle, details, and isPublic. Supported operations are claim_title, appoint, remove, delegate, revoke_delegation, seize_location, recognize, challenge, overthrow, imprison, defy, and betray. Use null for unused targets and IDs only from the supplied state.
 
 Return exactly one JSON object with exactly these fields:
 {
   "decisions": [{"actorCharacterId": 1, "decision": "accept | reject", "reason": "string"}],
+  "politicalOutcomes": [{
+    "actorCharacterId": 1,
+    "result": "executed | partially_executed | attempted | failed | resisted | delayed",
+    "consequence": "string",
+    "effects": [
+      {"type":"position","authorityPositionId":1,"positionStatus":"active | vacant | contested | suspended | removed | unknown","recognitionStatus":"recognized | contested | unrecognized | unknown","isDisputed":true},
+      {"type":"delegation","delegationId":1,"status":"active | revoked | expired | contested | unknown"},
+      {"type":"loyalty","loyaltyId":1,"strength":0},
+      {"type":"diplomacy","diplomacyRecordId":1,"status":"broken | fulfilled | ended"},
+      {"type":"recognition","authorityPositionId":1,"recognizedByCharacterId":1,"status":"recognized | disputed"}
+    ]
+  }],
   "eventTitle": "string",
   "eventType": "political | military | personal | movement | information | promise | decision | other",
   "canonicalSummary": "string"
 }
 
-Return one decision for every supplied order and no others. A wait/pass order must be accepted. Do not reveal confidential context in a reason. The canonical summary is for trusted internal history only, not player-facing narration. Player-facing outcomes are generated from persisted state changes and character-scoped knowledge, not from this canonical summary. Do not return actions or alter submitted orders.`,
+Return exactly one decision for every supplied order and one politicalOutcomes entry for every political_action order; do not include outcomes for other actions. The outcome effect objects must exactly match one listed shape. Use only record IDs present in the authoritative context. A wait/pass order must be accepted. Do not reveal confidential context in a decision reason or consequence. The canonical summary is untrusted until the engine replaces it with a summary derived from persisted outcomes. Player-facing outcomes are generated from committed state changes and character-scoped knowledge, not from this canonical summary. Do not return actions or alter submitted orders.`,
     user: [
       `RESOLVING SHARED WORLD TURN ${input.worldTurn}`,
       "AUTHORITATIVE WORLD CONTEXT (GAME MASTER ONLY)",

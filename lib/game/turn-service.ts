@@ -11,6 +11,7 @@ import {
   GameActionValidationError,
   parseStructuredGameTurn,
   parseStructuredWorldTurnResolution,
+  reconcilePoliticalOutcomeConflicts,
   simulateSimultaneousWorldTurn,
   type DiplomacyRelationType,
   type EngineDiplomacyRecord,
@@ -61,7 +62,9 @@ export type PlayerActionOutcome = {
     | "attempted"
     | "executed"
     | "partially_executed"
-    | "failed";
+    | "failed"
+    | "resisted"
+    | "delayed";
   summary: string;
   stateChanges: { changeType: string; description: string }[];
 };
@@ -79,7 +82,9 @@ function isOrderExecutionStatus(
     value === "attempted" ||
     value === "executed" ||
     value === "partially_executed" ||
-    value === "failed";
+    value === "failed" ||
+    value === "resisted" ||
+    value === "delayed";
 }
 
 export class StaleGameStateError extends Error {
@@ -797,16 +802,38 @@ export async function resolveGlobalWorldTurn(
     }
 
     const expectedActorIds = allOrders.map((order) => order.actorCharacterId);
+    const expectedPoliticalActorIds = allOrders.flatMap((order) =>
+      order.action.type === "political_action" ? [order.actorCharacterId] : []
+    );
     const checkpoint = claim.checkpoint;
     let resolution;
-    if (checkpoint !== null && checkpoint !== undefined) {
-      resolution = parseStructuredWorldTurnResolution(checkpoint, expectedActorIds);
+    const checkpointHasPoliticalOutcomes =
+      typeof checkpoint === "object" &&
+      checkpoint !== null &&
+      !Array.isArray(checkpoint) &&
+      Array.isArray((checkpoint as Record<string, unknown>).politicalOutcomes) &&
+      ((checkpoint as Record<string, unknown>).politicalOutcomes as unknown[]).length ===
+        expectedPoliticalActorIds.length;
+    if (
+      checkpoint !== null &&
+      checkpoint !== undefined &&
+      checkpointHasPoliticalOutcomes
+    ) {
+      resolution = parseStructuredWorldTurnResolution(
+        checkpoint,
+        expectedActorIds,
+        expectedPoliticalActorIds,
+      );
     } else {
       const prompt = await loadGroqWorldTurnResolutionPrompt({
         worldTurn: turnNumber,
         orders: allOrders,
       });
-      resolution = await inferStructuredWorldTurnResolution(prompt, expectedActorIds);
+      resolution = await inferStructuredWorldTurnResolution(
+        prompt,
+        expectedActorIds,
+        expectedPoliticalActorIds,
+      );
       heartbeat.assertActive();
       const { error: checkpointError } = await client.rpc("save_game_turn_checkpoint", {
         p_turn_number: turnNumber,
@@ -818,6 +845,12 @@ export async function resolveGlobalWorldTurn(
         raiseRpcError(checkpointError.message, "Unable to persist the world-turn resolution");
       }
     }
+    resolution = {
+      ...resolution,
+      politicalOutcomes: reconcilePoliticalOutcomeConflicts(
+        resolution.politicalOutcomes,
+      ),
+    };
     heartbeat.assertActive();
     const decisionByActor = new Map(
       resolution.decisions.map((decision) => [decision.actorCharacterId, decision]),
@@ -850,6 +883,13 @@ export async function resolveGlobalWorldTurn(
       actorCharacterId: result.actorCharacterId,
       decision: result.status === "rejected" ? "reject" : "accept",
       reason: result.reason,
+      ...(expectedPoliticalActorIds.includes(result.actorCharacterId)
+        ? {
+            politicalOutcome: resolution.politicalOutcomes.find(
+              (outcome) => outcome.actorCharacterId === result.actorCharacterId,
+            ),
+          }
+        : {}),
     }));
     heartbeat.assertActive();
     const { data: resolutionData, error: resolutionError } = await client.rpc(

@@ -19,6 +19,10 @@ begin
     raise exception
       'Run the latest supabase/global-turn-cycle.sql before this regression test.';
   end if;
+  if to_regclass('public.political_action_outcomes') is null then
+    raise exception
+      'Run supabase/political-authority.sql before this political outcome regression.';
+  end if;
 
   select * into world
   from public.world_state
@@ -56,11 +60,27 @@ begin
     participant.user_id,
     participant.character_id,
     'Outcome persistence regression order.',
-    jsonb_build_array(jsonb_build_object(
-      'type', 'wait',
-      'actorCharacterId', participant.character_id,
-      'reason', 'Verify player-specific outcome persistence.'
-    )),
+    case when participant.character_id = player_character then
+      jsonb_build_array(jsonb_build_object(
+        'type', 'political_action',
+        'actorCharacterId', participant.character_id,
+        'operation', 'claim_title',
+        'targetCharacterId', null,
+        'targetHouseId', null,
+        'targetLocationId', null,
+        'authorityPositionId', null,
+        'delegationId', null,
+        'targetTitle', 'Player-specific regression claim',
+        'details', 'Verify the political result is persisted privately.',
+        'isPublic', false
+      ))
+    else
+      jsonb_build_array(jsonb_build_object(
+        'type', 'wait',
+        'actorCharacterId', participant.character_id,
+        'reason', 'Verify player-specific outcome persistence.'
+      ))
+    end,
     'pending',
     null
   from public.gameplay_turn_participants as participant
@@ -118,11 +138,24 @@ begin
       resolution_checkpoint = null
   where id = 1;
 
-  select jsonb_agg(jsonb_build_object(
-    'actorCharacterId', actors.character_id,
-    'decision', 'accept',
-    'reason', 'The regression order is a non-state-changing pass.'
-  ) order by actors.character_id)
+  select jsonb_agg(case when actors.character_id = player_character then
+    jsonb_build_object(
+      'actorCharacterId', actors.character_id,
+      'decision', 'accept',
+      'reason', 'The claim was contextually accepted as an attempt.',
+      'politicalOutcome', jsonb_build_object(
+        'actorCharacterId', actors.character_id,
+        'result', 'executed',
+        'consequence', 'The contested claim was recorded.',
+        'effects', jsonb_build_array()
+      )
+    )
+    else jsonb_build_object(
+      'actorCharacterId', actors.character_id,
+      'decision', 'accept',
+      'reason', 'The regression order is a non-state-changing pass.'
+    )
+  end order by actors.character_id)
   into resolution_result
   from (
     select participant.character_id
@@ -155,13 +188,25 @@ begin
   if not found then
     raise exception 'The player's action outcome was not persisted.';
   end if;
-  if outcome.original_order ->> 'type' <> 'wait'
-    or outcome.decision_status <> 'pass'
-    or outcome.execution_status <> 'not_attempted'
-    or outcome.outcome_summary <> 'No action was taken during this world turn.'
+  if outcome.original_order ->> 'type' <> 'political_action'
+    or outcome.decision_status <> 'accepted'
+    or outcome.execution_status <> 'executed'
+    or outcome.outcome_summary not like '%claim was recorded%'
     or jsonb_typeof(outcome.state_changes) <> 'array'
+    or jsonb_array_length(outcome.state_changes) = 0
+    or not exists (
+      select 1
+      from jsonb_array_elements(outcome.state_changes) as wrapper(value)
+      cross join lateral jsonb_array_elements(
+        wrapper.value #> '{structuredChange,stateChanges}'
+      ) as change(value)
+      where change.value ->> 'type' = 'claim'
+        and change.value #>> '{resultingState,claimantCharacterId}' =
+          player_character::text
+        and change.value #>> '{resultingState,claimStatus}' = 'contested'
+    )
     or outcome.event_id is null then
-    raise exception 'The persisted player outcome does not match the committed pass.';
+    raise exception 'The persisted player outcome does not match the committed political claim.';
   end if;
 
   select count(*) into actual_outcomes
@@ -184,7 +229,7 @@ begin
   where resolution.world_state_id = 1
     and resolution.turn_number = turn_to_resolve;
   if resolved_summary is null
-    or resolved_summary not like '%No action was taken during this world turn.%'
+    or resolved_summary not like '%claim was recorded%'
     or resolved_summary like '%Regression-only shared-turn resolution.%' then
     raise exception 'The canonical turn summary was not rebuilt from persisted outcomes.';
   end if;

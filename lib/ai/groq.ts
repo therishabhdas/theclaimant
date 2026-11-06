@@ -37,9 +37,10 @@ Each action must use exactly one of these shapes:
 - {"type":"diplomacy_resolve","actorCharacterId":1,"diplomacyRecordId":1,"status":"active | broken | fulfilled | ended"}
 - {"type":"war_declare","actorCharacterId":1,"targetHouseId":1,"name":"string","summary":"string"}
 - {"type":"war_join","actorCharacterId":1,"warId":1,"side":"string"}
+- {"type":"political_action","actorCharacterId":1,"operation":"claim_title | appoint | remove | delegate | revoke_delegation | seize_location | recognize | challenge | overthrow | imprison | defy | betray","targetCharacterId":1,"targetHouseId":1,"targetLocationId":1,"authorityPositionId":1,"delegationId":1,"targetTitle":"string or null","details":"string","isPublic":false}
 - {"type":"wait","actorCharacterId":1,"reason":"string"}
 
-Use only numeric IDs present in the supplied campaign state. Treat actions as proposals for deterministic validation, not facts already completed. Include at least one action; use "wait" if no state-changing action is justified. Do not output markdown or additional properties.`;
+Use only numeric IDs present in the supplied campaign state. For political_action, every target field is required and unused target fields must be null; targetTitle is a string for claim_title and appoint, otherwise null. Treat actions as proposals for contextual adjudication, not facts already completed. Include at least one action; use "wait" if no state-changing action is justified. Do not output markdown or additional properties.`;
 
 export async function inferStructuredGameTurn(
   prompt: GroqGamePrompt,
@@ -76,6 +77,7 @@ export async function inferStructuredGameTurn(
 export async function inferStructuredWorldTurnResolution(
   prompt: GroqGamePrompt,
   expectedActorIds: number[],
+  expectedPoliticalActorIds: number[],
 ): Promise<StructuredWorldTurnResolution> {
   const completion = await createGroqClient().chat.completions.create({
     model: GROQ_MODEL,
@@ -100,5 +102,9 @@ export async function inferStructuredWorldTurnResolution(
     });
   }
 
-  return parseStructuredWorldTurnResolution(generated, expectedActorIds);
+  return parseStructuredWorldTurnResolution(
+    generated,
+    expectedActorIds,
+    expectedPoliticalActorIds,
+  );
 }

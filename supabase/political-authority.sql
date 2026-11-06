@@ -159,16 +159,36 @@ create table if not exists public.political_action_outcomes (
     references public.playable_characters(id) on delete restrict,
   action_operation text not null check (length(trim(action_operation)) > 0),
   action_data jsonb not null check (jsonb_typeof(action_data) = 'object'),
+  resolution_plan jsonb not null default '{}'::jsonb
+    check (jsonb_typeof(resolution_plan) = 'object'),
   order_accepted boolean not null,
   execution_status text not null
-    check (execution_status in ('not_attempted', 'attempted', 'executed', 'failed')),
+    check (execution_status in (
+      'not_attempted', 'attempted', 'executed', 'partially_executed',
+      'failed', 'resisted', 'delayed'
+    )),
   authority_status text not null
     check (authority_status in ('recognized', 'contested', 'unrecognized', 'unknown')),
   consequence text not null,
+  state_changes jsonb not null default '[]'::jsonb
+    check (jsonb_typeof(state_changes) = 'array'),
   source_event_id bigint references public.game_events(id) on delete set null,
   created_at timestamptz not null default now(),
   unique (world_state_id, turn_number, actor_character_id)
 );
+
+alter table public.political_action_outcomes
+  add column if not exists resolution_plan jsonb not null default '{}'::jsonb;
+alter table public.political_action_outcomes
+  add column if not exists state_changes jsonb not null default '[]'::jsonb;
+alter table public.political_action_outcomes
+  drop constraint if exists political_action_outcomes_execution_status_check;
+alter table public.political_action_outcomes
+  add constraint political_action_outcomes_execution_status_check
+  check (execution_status in (
+    'not_attempted', 'attempted', 'executed', 'partially_executed',
+    'failed', 'resisted', 'delayed'
+  ));
 
 create table if not exists public.political_detentions (
   id bigint generated always as identity primary key,
@@ -488,7 +508,21 @@ declare
   region_id smallint;
   position_id bigint;
   delegation_id bigint;
+  claim_id bigint;
+  recognition_id bigint;
+  detention_id bigint;
   outcome_id bigint;
+  resolution_plan jsonb;
+  planned_result text;
+  planned_consequence text;
+  state_changes jsonb;
+  effect_row record;
+  previous_effect_value text;
+  resulting_effect_value text;
+  previous_position_state jsonb;
+  resulting_position_state jsonb;
+  previous_delegation_state jsonb;
+  resulting_delegation_state jsonb;
   v_consequence text;
   v_execution_status text;
   v_authority_status text;
@@ -502,7 +536,8 @@ begin
   for order_row in
     select orders.character_id as actor_id,
       orders.action_data -> 0 as action,
-      orders.resolution_status, orders.resolution_note
+      orders.resolution_status, orders.resolution_note,
+      orders.resolution_outcome
     from public.gameplay_turn_orders as orders
     where orders.world_state_id = new.id
       and orders.turn_number = new.turn_number
@@ -510,7 +545,8 @@ begin
     union all
     select orders.character_id as actor_id,
       orders.action_data -> 0 as action,
-      orders.resolution_status, orders.resolution_note
+      orders.resolution_status, orders.resolution_note,
+      orders.resolution_outcome
     from public.gameplay_npc_orders as orders
     where orders.world_state_id = new.id
       and orders.turn_number = new.turn_number
@@ -521,16 +557,20 @@ begin
       continue;
     end if;
 
+    outcome_id := null;
     insert into public.political_action_outcomes (
       world_state_id, turn_number, actor_character_id, action_operation,
-      action_data, order_accepted, execution_status, authority_status,
-      consequence
+      action_data, resolution_plan, order_accepted, execution_status,
+      authority_status, consequence, state_changes
     )
     values (
       new.id, new.turn_number, order_row.actor_id,
       order_row.action ->> 'operation', order_row.action,
+      coalesce(order_row.resolution_outcome, '{}'::jsonb),
       order_row.resolution_status = 'accepted',
-      'attempted', 'unknown', 'The action was attempted; its political recognition is unresolved.'
+      'attempted', 'unknown',
+      'The action was attempted; its political recognition is unresolved.',
+      '[]'::jsonb
     )
     on conflict (world_state_id, turn_number, actor_character_id) do nothing
     returning id into outcome_id;
@@ -542,10 +582,71 @@ begin
     if order_row.resolution_status <> 'accepted' then
       update public.political_action_outcomes
       set execution_status = 'failed',
-          consequence = coalesce(
-            order_row.resolution_note,
-            'The political attempt was rejected during turn resolution.'
-          )
+          consequence = 'The political order was not accepted; no political effect was applied.'
+      where id = outcome_id;
+      continue;
+    end if;
+
+    resolution_plan := order_row.resolution_outcome;
+    planned_result := resolution_plan ->> 'result';
+    planned_consequence := resolution_plan ->> 'consequence';
+    state_changes := '[]'::jsonb;
+    position_id := null;
+    delegation_id := null;
+    claim_id := null;
+    recognition_id := null;
+    detention_id := null;
+    previous_position_state := null;
+    previous_delegation_state := null;
+    if order_row.action ->> 'authorityPositionId' is not null then
+      select jsonb_build_object(
+        'characterId', position.character_id,
+        'positionStatus', position.position_status,
+        'recognitionStatus', position.recognition_status,
+        'isDisputed', position.is_disputed
+      )
+      into previous_position_state
+      from public.political_authority_positions as position
+      where position.id = (order_row.action ->> 'authorityPositionId')::bigint;
+      position_id := (order_row.action ->> 'authorityPositionId')::bigint;
+    end if;
+    if order_row.action ->> 'delegationId' is not null then
+      select jsonb_build_object(
+        'status', delegation.status,
+        'delegateCharacterId', delegation.delegate_character_id
+      )
+      into previous_delegation_state
+      from public.political_delegations as delegation
+      where delegation.id = (order_row.action ->> 'delegationId')::bigint;
+      delegation_id := (order_row.action ->> 'delegationId')::bigint;
+    end if;
+    if planned_result is null
+      or planned_result not in (
+        'executed', 'partially_executed', 'attempted', 'failed', 'resisted', 'delayed'
+      )
+      or planned_consequence is null
+      or jsonb_typeof(resolution_plan -> 'effects') is distinct from 'array' then
+      update public.political_action_outcomes
+      set execution_status = 'failed',
+          consequence = 'The political attempt has no valid contextual adjudication plan.'
+      where id = outcome_id;
+      continue;
+    end if;
+    if planned_result not in ('executed', 'partially_executed') then
+      update public.political_action_outcomes
+      set execution_status = planned_result,
+          authority_status = 'unknown',
+          consequence = case planned_result
+            when 'attempted' then
+              'The action remained an attempt; no supported political state change was committed.'
+            when 'failed' then
+              'The action did not achieve its political goal; no supported state change was committed.'
+            when 'resisted' then
+              'The stated political goal was resisted; no supported state change was committed.'
+            else
+              'The political result remains unresolved; no supported state change was committed.'
+          end,
+          resolution_plan = resolution_plan
       where id = outcome_id;
       continue;
     end if;
@@ -566,10 +667,22 @@ begin
           order_row.actor_id, actor_house_id,
           order_row.action ->> 'targetTitle', 'contested',
           nullif(order_row.action ->> 'details', '')
-        );
+        )
+        returning id into claim_id;
         v_execution_status := 'executed';
         v_authority_status := 'contested';
         v_consequence := 'The claim was recorded; it does not itself confer recognized authority.';
+        state_changes := jsonb_build_array(jsonb_build_object(
+          'type', 'claim',
+          'id', claim_id,
+          'previousState', null,
+          'resultingState', jsonb_build_object(
+            'claimantCharacterId', order_row.actor_id,
+            'claimantHouseId', actor_house_id,
+            'targetTitle', order_row.action ->> 'targetTitle',
+            'claimStatus', 'contested'
+          )
+        ));
 
       when 'appoint' then
         entity_id := case
@@ -583,10 +696,16 @@ begin
             (select entity.id from public.political_entities as entity
              where entity.entity_key = 'institution:iron-throne')
         end;
-        if entity_id is null then
+        if entity_id is null
+          or nullif(trim(order_row.action ->> 'targetTitle'), '') is null
+          or not exists (
+            select 1
+            from public.playable_characters as target
+            where target.id = (order_row.action ->> 'targetCharacterId')::integer
+          ) then
           v_execution_status := 'failed';
           v_authority_status := 'unknown';
-          v_consequence := 'The appointment could not be linked to a known political entity.';
+          v_consequence := 'The appointment could not be linked to a known political entity and character.';
         else
           region_id := null;
           if (order_row.action ->> 'targetHouseId') is not null then
@@ -628,7 +747,14 @@ begin
             valid_through_turn = new.turn_number,
             updated_at = now()
         where position.id = (order_row.action ->> 'authorityPositionId')::bigint
-          and position.position_status not in ('removed', 'vacant');
+          and position.position_status not in ('removed', 'vacant')
+          and exists (
+            select 1
+            from jsonb_array_elements(resolution_plan -> 'effects') as effect(value)
+            where effect.value ->> 'type' = 'position'
+              and (effect.value ->> 'authorityPositionId')::bigint = position.id
+              and effect.value ->> 'positionStatus' = 'removed'
+          );
         v_execution_status := case when found then 'executed' else 'failed' end;
         v_authority_status := case when found then 'unrecognized' else 'unknown' end;
         v_consequence := case when found
@@ -636,11 +762,36 @@ begin
           else 'The position was not active and could not be removed.'
         end;
         if v_execution_status = 'executed' then
-          update public.political_delegations as delegation
-          set status = 'revoked', ends_turn = new.turn_number, updated_at = now()
-          where delegation.authority_position_id =
-              (order_row.action ->> 'authorityPositionId')::bigint
-            and delegation.status = 'active';
+          for effect_row in
+            select delegation.id, delegation.status
+            from public.political_delegations as delegation
+            where delegation.authority_position_id =
+                (order_row.action ->> 'authorityPositionId')::bigint
+              and delegation.status = 'active'
+              and exists (
+                select 1
+                from jsonb_array_elements(resolution_plan -> 'effects') as effect(value)
+                where effect.value ->> 'type' = 'delegation'
+                  and (effect.value ->> 'delegationId')::bigint = delegation.id
+                  and effect.value ->> 'status' = 'revoked'
+              )
+          loop
+            update public.political_delegations as delegation
+            set status = 'revoked', ends_turn = new.turn_number, updated_at = now()
+            where delegation.id = effect_row.id
+            returning delegation.status into resulting_effect_value;
+            if found then
+              state_changes := state_changes || jsonb_build_array(jsonb_build_object(
+                'type', 'delegation',
+                'id', effect_row.id,
+                'previousState', jsonb_build_object('status', effect_row.status),
+                'resultingState', jsonb_build_object(
+                  'status', resulting_effect_value,
+                  'endsTurn', new.turn_number
+                )
+              ));
+            end if;
+          end loop;
         end if;
 
       when 'delegate' then
@@ -654,17 +805,31 @@ begin
           (order_row.action ->> 'targetCharacterId')::integer,
           coalesce(nullif(order_row.action ->> 'details', ''), 'Delegated responsibilities unspecified.'),
           case when position.character_id = order_row.actor_id
+              and position.position_status = 'active'
+              and position.recognition_status = 'recognized'
             then 'recognized' else 'contested' end,
           v_is_public, new.turn_number
         from public.political_authority_positions as position
-        where position.id = (order_row.action ->> 'authorityPositionId')::bigint;
-        v_execution_status := 'executed';
-        v_authority_status := case when exists (
+        where position.id = (order_row.action ->> 'authorityPositionId')::bigint
+          and position.position_status not in ('removed', 'vacant')
+          and (order_row.action ->> 'targetCharacterId')::integer <> order_row.actor_id
+          and exists (
+            select 1 from public.playable_characters as target
+            where target.id = (order_row.action ->> 'targetCharacterId')::integer
+          )
+        returning id into delegation_id;
+        v_execution_status := case when delegation_id is null then 'failed' else 'executed' end;
+        v_authority_status := case when delegation_id is null then 'unknown'
+          when exists (
           select 1 from public.political_authority_positions as position
           where position.id = (order_row.action ->> 'authorityPositionId')::bigint
             and position.character_id = order_row.actor_id
+            and position.position_status = 'active'
+            and position.recognition_status = 'recognized'
         ) then 'recognized' else 'contested' end;
-        v_consequence := case when v_authority_status = 'recognized'
+        v_consequence := case when delegation_id is null
+          then 'No valid active office or delegate was found; no delegation was created.'
+          when v_authority_status = 'recognized'
           then 'A recognized officeholder delegated limited responsibilities; the office remains with its holder.'
           else 'The delegation was recorded as contested; it does not transfer the underlying office.'
         end;
@@ -673,7 +838,14 @@ begin
         update public.political_delegations as delegation
         set status = 'revoked', ends_turn = new.turn_number, updated_at = now()
         where delegation.id = (order_row.action ->> 'delegationId')::bigint
-          and delegation.status = 'active';
+          and delegation.status = 'active'
+          and exists (
+            select 1
+            from jsonb_array_elements(resolution_plan -> 'effects') as effect(value)
+            where effect.value ->> 'type' = 'delegation'
+              and (effect.value ->> 'delegationId')::bigint = delegation.id
+              and effect.value ->> 'status' = 'revoked'
+          );
         v_execution_status := case when found then 'executed' else 'failed' end;
         v_authority_status := case when found then 'contested' else 'unknown' end;
         v_consequence := case when found
@@ -682,56 +854,9 @@ begin
         end;
 
       when 'seize_location' then
-        if actor_house_id is null then
-          v_execution_status := 'failed';
-          v_authority_status := 'unrecognized';
-          v_consequence := 'The actor has no associated house with which to record territorial control.';
-        else
-          select location.world_region_id into region_id
-          from public.playable_locations as location
-          where location.id = (order_row.action ->> 'targetLocationId')::bigint;
-          if region_id is null or not exists (
-            select 1 from public.game_muster_orders as muster
-            where muster.requested_by_character_id = order_row.actor_id
-              and muster.region_id = region_id
-              and muster.status = 'ready'
-          ) then
-            v_execution_status := 'attempted';
-            v_authority_status := 'unrecognized';
-            v_consequence := 'A seizure was attempted, but no ready force under this character is established in the location region.';
-          else
-            insert into public.political_territorial_control_history (
-              world_state_id, location_id, previous_house_id, new_house_id,
-              changed_by_character_id, turn_number
-            )
-            select
-              new.id,
-              location_id,
-              previous.house_id,
-              actor_house_id,
-              order_row.actor_id,
-              new.turn_number
-            from (select (order_row.action ->> 'targetLocationId')::bigint as location_id) as target
-            left join public.house_location_relations as previous
-              on previous.location_id = target.location_id
-              and previous.relation_type = 'current_control';
-            delete from public.house_location_relations as relation
-            where relation.location_id = (order_row.action ->> 'targetLocationId')::bigint
-              and relation.relation_type = 'current_control';
-            insert into public.house_location_relations (
-              house_id, location_id, relation_type
-            )
-            values (
-              actor_house_id,
-              (order_row.action ->> 'targetLocationId')::bigint,
-              'current_control'
-            )
-            on conflict (house_id, location_id, relation_type) do nothing;
-            v_execution_status := 'executed';
-            v_authority_status := 'unrecognized';
-            v_consequence := 'Current territorial control changed; formal recognition remains unresolved.';
-          end if;
-        end if;
+        v_execution_status := 'attempted';
+        v_authority_status := 'unrecognized';
+        v_consequence := 'The seizure was attempted; territorial control remains unchanged because no battle, siege, or surrender resolution exists.';
 
       when 'recognize' then
         insert into public.political_authority_recognitions (
@@ -743,6 +868,14 @@ begin
         from public.political_authority_positions as position
         where position.id = (order_row.action ->> 'authorityPositionId')::bigint
           and position.position_status not in ('removed', 'vacant')
+          and exists (
+            select 1
+            from jsonb_array_elements(resolution_plan -> 'effects') as effect(value)
+            where effect.value ->> 'type' = 'recognition'
+              and (effect.value ->> 'authorityPositionId')::bigint = position.id
+              and (effect.value ->> 'recognizedByCharacterId')::integer = order_row.actor_id
+              and effect.value ->> 'status' = 'recognized'
+          )
         on conflict (
           authority_position_id, recognized_by_character_id, turn_number
         ) do update set
@@ -750,11 +883,27 @@ begin
           is_public = excluded.is_public;
         get diagnostics affected_rows = row_count;
         if affected_rows > 0 then
+          select recognition.id into recognition_id
+          from public.political_authority_recognitions as recognition
+          where recognition.authority_position_id =
+              (order_row.action ->> 'authorityPositionId')::bigint
+            and recognition.recognized_by_character_id = order_row.actor_id
+            and recognition.turn_number = new.turn_number;
           select position.recognition_status into v_authority_status
           from public.political_authority_positions as position
           where position.id = (order_row.action ->> 'authorityPositionId')::bigint;
           v_execution_status := 'executed';
           v_consequence := 'The actor recorded recognition; other characters may still dispute the position or refuse obedience.';
+          state_changes := jsonb_build_array(jsonb_build_object(
+            'type', 'recognition',
+            'id', recognition_id,
+            'previousState', null,
+            'resultingState', jsonb_build_object(
+              'authorityPositionId', (order_row.action ->> 'authorityPositionId')::bigint,
+              'recognizedByCharacterId', order_row.actor_id,
+              'recognitionStatus', 'recognized'
+            )
+          ));
         else
           v_execution_status := 'failed';
           v_authority_status := 'unknown';
@@ -769,7 +918,16 @@ begin
             is_disputed = true,
             updated_at = now()
         where position.id = (order_row.action ->> 'authorityPositionId')::bigint
-          and position.position_status not in ('removed', 'vacant');
+          and position.position_status not in ('removed', 'vacant')
+          and exists (
+            select 1
+            from jsonb_array_elements(resolution_plan -> 'effects') as effect(value)
+            where effect.value ->> 'type' = 'position'
+              and (effect.value ->> 'authorityPositionId')::bigint = position.id
+              and effect.value ->> 'positionStatus' = 'contested'
+              and effect.value ->> 'recognitionStatus' = 'contested'
+              and (effect.value ->> 'isDisputed')::boolean
+          );
         v_execution_status := case when found then 'executed' else 'failed' end;
         v_authority_status := 'contested';
         v_consequence := case when found
@@ -785,8 +943,19 @@ begin
             is_disputed = true,
             updated_at = now()
         where position.id = (order_row.action ->> 'authorityPositionId')::bigint
-          and position.position_status not in ('removed', 'vacant');
-        v_execution_status := case when found then 'attempted' else 'failed' end;
+          and position.position_status not in ('removed', 'vacant')
+          and exists (
+            select 1
+            from jsonb_array_elements(resolution_plan -> 'effects') as effect(value)
+            where effect.value ->> 'type' = 'position'
+              and (effect.value ->> 'authorityPositionId')::bigint = position.id
+              and effect.value ->> 'positionStatus' = 'contested'
+              and effect.value ->> 'recognitionStatus' = 'contested'
+              and (effect.value ->> 'isDisputed')::boolean
+          );
+        v_execution_status := case
+          when found then 'partially_executed' else 'failed'
+        end;
         v_authority_status := 'contested';
         v_consequence := case when found
           then 'An overthrow was attempted and the office is disputed; removal is not presumed.'
@@ -808,9 +977,36 @@ begin
         from public.playable_characters as character
         where character.id = (order_row.action ->> 'targetCharacterId')::integer
           and character.id <> order_row.actor_id;
-        v_execution_status := case when found then 'attempted' else 'failed' end;
+        get diagnostics affected_rows = row_count;
+        if affected_rows > 0 then
+          select detention.id into detention_id
+          from public.political_detentions as detention
+          where detention.world_state_id = new.id
+            and detention.prisoner_character_id =
+              (order_row.action ->> 'targetCharacterId')::integer
+            and detention.custodian_character_id = order_row.actor_id
+            and detention.started_turn = new.turn_number
+          order by detention.id desc
+          limit 1;
+          state_changes := jsonb_build_array(jsonb_build_object(
+            'type', 'detention_attempt',
+            'id', detention_id,
+            'previousState', null,
+            'resultingState', jsonb_build_object(
+              'prisonerCharacterId', (order_row.action ->> 'targetCharacterId')::integer,
+              'custodianCharacterId', order_row.actor_id,
+              'locationId', (
+                select character.current_location_id
+                from public.playable_characters as character
+                where character.id = (order_row.action ->> 'targetCharacterId')::integer
+              ),
+              'status', 'attempted'
+            )
+          ));
+        end if;
+        v_execution_status := case when affected_rows > 0 then 'attempted' else 'failed' end;
         v_authority_status := 'unknown';
-        v_consequence := case when found
+        v_consequence := case when affected_rows > 0
           then 'An imprisonment was attempted; custody is not presumed.'
           else 'The target could not be detained.'
         end;
@@ -821,32 +1017,75 @@ begin
         v_consequence := 'Defiance was recorded; neither authority nor obedience is inferred from rank.';
 
       when 'betray' then
-        if (order_row.action ->> 'targetCharacterId') is not null then
-          update public.character_loyalties as loyalty
-          set strength = 0
-          where loyalty.character_id = order_row.actor_id
-            and loyalty.loyal_to_character_id =
-              (order_row.action ->> 'targetCharacterId')::integer;
-        end if;
-        if (order_row.action ->> 'targetHouseId') is not null then
-          update public.diplomacy_records as relation
-          set status = 'broken'
-          where relation.status = 'active'
-            and relation.relation_type in ('alliance', 'treaty', 'fealty', 'promise')
-            and (
-              relation.character_a_id = order_row.actor_id
-              or relation.character_b_id = order_row.actor_id
-              or relation.house_a_id = actor_house_id
-              or relation.house_b_id = actor_house_id
-            )
-            and (
-              relation.house_a_id = (order_row.action ->> 'targetHouseId')::bigint
-              or relation.house_b_id = (order_row.action ->> 'targetHouseId')::bigint
-            );
-        end if;
-        v_execution_status := 'executed';
+        for effect_row in
+          select effect.value
+          from jsonb_array_elements(resolution_plan -> 'effects') as effect(value)
+        loop
+          if effect_row.value ->> 'type' = 'loyalty'
+            and (order_row.action ->> 'targetCharacterId') is not null then
+            select loyalty.strength::text into previous_effect_value
+            from public.character_loyalties as loyalty
+            where loyalty.id = (effect_row.value ->> 'loyaltyId')::bigint
+              and loyalty.character_id = order_row.actor_id
+              and loyalty.loyal_to_character_id =
+                (order_row.action ->> 'targetCharacterId')::integer;
+            if found then
+              update public.character_loyalties as loyalty
+              set strength = (effect_row.value ->> 'strength')::smallint
+              where loyalty.id = (effect_row.value ->> 'loyaltyId')::bigint
+              returning loyalty.strength::text into resulting_effect_value;
+              if found then
+                state_changes := state_changes || jsonb_build_array(jsonb_build_object(
+                  'type', 'loyalty',
+                  'id', (effect_row.value ->> 'loyaltyId')::bigint,
+                  'previousStrength', previous_effect_value,
+                  'resultingStrength', resulting_effect_value
+                ));
+              end if;
+            end if;
+          elsif effect_row.value ->> 'type' = 'diplomacy'
+            and (order_row.action ->> 'targetHouseId') is not null then
+            select relation.status into previous_effect_value
+            from public.diplomacy_records as relation
+            where relation.id = (effect_row.value ->> 'diplomacyRecordId')::bigint
+              and relation.status = 'active'
+              and (
+                relation.character_a_id = order_row.actor_id
+                or relation.character_b_id = order_row.actor_id
+                or relation.house_a_id = actor_house_id
+                or relation.house_b_id = actor_house_id
+              )
+              and (
+                relation.house_a_id = (order_row.action ->> 'targetHouseId')::bigint
+                or relation.house_b_id = (order_row.action ->> 'targetHouseId')::bigint
+              );
+            if found then
+              update public.diplomacy_records as relation
+              set status = effect_row.value ->> 'status',
+                  ended_on = current_date
+              where relation.id = (effect_row.value ->> 'diplomacyRecordId')::bigint
+                and relation.status = 'active'
+              returning relation.status into resulting_effect_value;
+              if found then
+                state_changes := state_changes || jsonb_build_array(jsonb_build_object(
+                  'type', 'diplomacy',
+                  'id', (effect_row.value ->> 'diplomacyRecordId')::bigint,
+                  'previousStatus', previous_effect_value,
+                  'resultingStatus', resulting_effect_value
+                ));
+              end if;
+            end if;
+          end if;
+        end loop;
+        v_execution_status := case
+          when jsonb_array_length(state_changes) > 0 then 'executed'
+          else 'attempted'
+        end;
         v_authority_status := 'unknown';
-        v_consequence := 'Relevant recorded loyalty or agreements were broken; unrecorded ties remain unchanged.';
+        v_consequence := case when jsonb_array_length(state_changes) > 0
+          then 'Recorded loyalty or agreements changed as specified; all other ties remain unchanged.'
+          else 'The betrayal was attempted, but no matching recorded loyalty or agreement changed.'
+        end;
 
       else
         v_execution_status := 'failed';
@@ -854,10 +1093,52 @@ begin
         v_consequence := 'The political operation is not supported.';
     end case;
 
+    if planned_result = 'partially_executed'
+      and v_execution_status = 'executed' then
+      v_execution_status := 'partially_executed';
+    end if;
+    if position_id is not null then
+      select jsonb_build_object(
+        'characterId', position.character_id,
+        'positionStatus', position.position_status,
+        'recognitionStatus', position.recognition_status,
+        'isDisputed', position.is_disputed
+      )
+      into resulting_position_state
+      from public.political_authority_positions as position
+      where position.id = position_id;
+      if resulting_position_state is distinct from previous_position_state then
+        state_changes := state_changes || jsonb_build_array(jsonb_build_object(
+          'type', 'position',
+          'id', position_id,
+          'previousState', previous_position_state,
+          'resultingState', resulting_position_state
+        ));
+      end if;
+    end if;
+    if delegation_id is not null then
+      select jsonb_build_object(
+        'status', delegation.status,
+        'delegateCharacterId', delegation.delegate_character_id
+      )
+      into resulting_delegation_state
+      from public.political_delegations as delegation
+      where delegation.id = delegation_id;
+      if resulting_delegation_state is distinct from previous_delegation_state then
+        state_changes := state_changes || jsonb_build_array(jsonb_build_object(
+          'type', 'delegation',
+          'id', delegation_id,
+          'previousState', previous_delegation_state,
+          'resultingState', resulting_delegation_state
+        ));
+      end if;
+    end if;
     update public.political_action_outcomes
     set execution_status = v_execution_status,
         authority_status = v_authority_status,
-        consequence = v_consequence
+        consequence = v_consequence,
+        resolution_plan = resolution_plan,
+        state_changes = state_changes
     where id = outcome_id;
   end loop;
 

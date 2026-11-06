@@ -135,12 +135,71 @@ export type WorldTurnOrderDecision = {
   reason: string;
 };
 
+export type PoliticalResolutionEffect =
+  | {
+      type: "position";
+      authorityPositionId: number;
+      positionStatus: EnginePoliticalPosition["status"];
+      recognitionStatus: "recognized" | "contested" | "unrecognized" | "unknown";
+      isDisputed: boolean;
+    }
+  | {
+      type: "delegation";
+      delegationId: number;
+      status: EnginePoliticalDelegation["status"];
+    }
+  | {
+      type: "loyalty";
+      loyaltyId: number;
+      strength: number;
+    }
+  | {
+      type: "diplomacy";
+      diplomacyRecordId: number;
+      status: "broken" | "fulfilled" | "ended";
+    }
+  | {
+      type: "recognition";
+      authorityPositionId: number;
+      recognizedByCharacterId: number;
+      status: "recognized" | "disputed";
+    };
+
+export type PoliticalActionResolution = {
+  actorCharacterId: number;
+  result:
+    | "executed"
+    | "partially_executed"
+    | "attempted"
+    | "failed"
+    | "resisted"
+    | "delayed";
+  consequence: string;
+  effects: PoliticalResolutionEffect[];
+};
+
 export type StructuredWorldTurnResolution = {
   decisions: WorldTurnOrderDecision[];
+  politicalOutcomes: PoliticalActionResolution[];
   eventTitle: string;
   eventType: SupportedTurnEventType;
   canonicalSummary: string;
 };
+
+function politicalEffectTarget(effect: PoliticalResolutionEffect): string {
+  switch (effect.type) {
+    case "position":
+      return `position:${effect.authorityPositionId}`;
+    case "recognition":
+      return `recognition:${effect.authorityPositionId}:${effect.recognizedByCharacterId}`;
+    case "delegation":
+      return `delegation:${effect.delegationId}`;
+    case "loyalty":
+      return `loyalty:${effect.loyaltyId}`;
+    case "diplomacy":
+      return `diplomacy:${effect.diplomacyRecordId}`;
+  }
+}
 
 export type EngineCharacter = {
   id: number;
@@ -514,15 +573,24 @@ export function parseStructuredGameTurn(value: unknown): StructuredGameTurn {
 export function parseStructuredWorldTurnResolution(
   value: unknown,
   expectedActorIds: number[],
+  expectedPoliticalActorIds: number[] = [],
 ): StructuredWorldTurnResolution {
   if (
     !isRecord(value) ||
-    !hasExactKeys(value, ["decisions", "eventTitle", "eventType", "canonicalSummary"]) ||
+    !hasExactKeys(value, [
+      "decisions",
+      "politicalOutcomes",
+      "eventTitle",
+      "eventType",
+      "canonicalSummary",
+    ]) ||
     !isText(value.eventTitle, 160) ||
     !isOneOf(value.eventType, SUPPORTED_TURN_EVENT_TYPES) ||
     !isText(value.canonicalSummary, 4000) ||
     !Array.isArray(value.decisions) ||
-    value.decisions.length !== expectedActorIds.length
+    value.decisions.length !== expectedActorIds.length ||
+    !Array.isArray(value.politicalOutcomes) ||
+    value.politicalOutcomes.length !== expectedPoliticalActorIds.length
   ) {
     throw new Error("The generated world-turn resolution has an invalid response shape.");
   }
@@ -552,12 +620,202 @@ export function parseStructuredWorldTurnResolution(
     throw new Error("The generated world-turn resolution omitted an order.");
   }
 
+  const expectedPolitical = new Set(expectedPoliticalActorIds);
+  const seenPolitical = new Set<number>();
+  const politicalOutcomes = value.politicalOutcomes.map((entry) => {
+    if (
+      !isRecord(entry) ||
+      !hasExactKeys(entry, ["actorCharacterId", "result", "consequence", "effects"]) ||
+      !isPositivePgInteger(entry.actorCharacterId) ||
+      !expectedPolitical.has(entry.actorCharacterId) ||
+      seenPolitical.has(entry.actorCharacterId) ||
+      !isOneOf(entry.result, [
+        "executed",
+        "partially_executed",
+        "attempted",
+        "failed",
+        "resisted",
+        "delayed",
+      ]) ||
+      !isText(entry.consequence, 1200) ||
+      !Array.isArray(entry.effects) ||
+      entry.effects.length > 12
+    ) {
+      throw new Error("The generated world-turn resolution contains an invalid political outcome.");
+    }
+    seenPolitical.add(entry.actorCharacterId);
+    const effects = entry.effects.map((effect) => {
+      if (!isRecord(effect) || typeof effect.type !== "string") {
+        throw new Error("The generated political outcome contains an invalid effect.");
+      }
+      switch (effect.type) {
+        case "position":
+          if (
+            !hasExactKeys(effect, [
+              "type",
+              "authorityPositionId",
+              "positionStatus",
+              "recognitionStatus",
+              "isDisputed",
+            ]) ||
+            !isPositiveInteger(effect.authorityPositionId) ||
+            !isOneOf(effect.positionStatus, [
+              "active",
+              "vacant",
+              "contested",
+              "suspended",
+              "removed",
+              "unknown",
+            ]) ||
+            !isOneOf(effect.recognitionStatus, [
+              "recognized",
+              "contested",
+              "unrecognized",
+              "unknown",
+            ]) ||
+            typeof effect.isDisputed !== "boolean"
+          ) {
+            throw new Error("The generated political position effect is invalid.");
+          }
+          return {
+            type: effect.type,
+            authorityPositionId: effect.authorityPositionId,
+            positionStatus: effect.positionStatus,
+            recognitionStatus: effect.recognitionStatus,
+            isDisputed: effect.isDisputed,
+          };
+        case "delegation":
+          if (
+            !hasExactKeys(effect, ["type", "delegationId", "status"]) ||
+            !isPositiveInteger(effect.delegationId) ||
+            !isOneOf(effect.status, ["active", "revoked", "expired", "contested", "unknown"])
+          ) {
+            throw new Error("The generated political delegation effect is invalid.");
+          }
+          return {
+            type: effect.type,
+            delegationId: effect.delegationId,
+            status: effect.status,
+          };
+        case "loyalty":
+          if (
+            !hasExactKeys(effect, ["type", "loyaltyId", "strength"]) ||
+            !isPositiveInteger(effect.loyaltyId) ||
+            typeof effect.strength !== "number" ||
+            !Number.isInteger(effect.strength) ||
+            effect.strength < 0 ||
+            effect.strength > 100
+          ) {
+            throw new Error("The generated political loyalty effect is invalid.");
+          }
+          return {
+            type: effect.type,
+            loyaltyId: effect.loyaltyId,
+            strength: effect.strength,
+          };
+        case "diplomacy":
+          if (
+            !hasExactKeys(effect, ["type", "diplomacyRecordId", "status"]) ||
+            !isPositiveInteger(effect.diplomacyRecordId) ||
+            !isOneOf(effect.status, ["broken", "fulfilled", "ended"])
+          ) {
+            throw new Error("The generated political diplomacy effect is invalid.");
+          }
+          return {
+            type: effect.type,
+            diplomacyRecordId: effect.diplomacyRecordId,
+            status: effect.status,
+          };
+        case "recognition":
+          if (
+            !hasExactKeys(effect, [
+              "type",
+              "authorityPositionId",
+              "recognizedByCharacterId",
+              "status",
+            ]) ||
+            !isPositiveInteger(effect.authorityPositionId) ||
+            !isPositivePgInteger(effect.recognizedByCharacterId) ||
+            !isOneOf(effect.status, ["recognized", "disputed"])
+          ) {
+            throw new Error("The generated political recognition effect is invalid.");
+          }
+          return {
+            type: effect.type,
+            authorityPositionId: effect.authorityPositionId,
+            recognizedByCharacterId: effect.recognizedByCharacterId,
+            status: effect.status,
+          };
+        default:
+          throw new Error("The generated political outcome contains an unsupported effect.");
+      }
+    });
+    const effectTargets = new Set<string>();
+    for (const effect of effects) {
+        const target = politicalEffectTarget(effect);
+        if (effectTargets.has(target)) {
+          throw new Error("The generated political outcome contains conflicting effects for one record.");
+        }
+        effectTargets.add(target);
+    }
+    return {
+      actorCharacterId: entry.actorCharacterId,
+      result: entry.result,
+      consequence: entry.consequence.trim(),
+      effects,
+    };
+  });
+  if (seenPolitical.size !== expectedPolitical.size) {
+    throw new Error("The generated world-turn resolution omitted a political outcome.");
+  }
+
   return {
     decisions,
+    politicalOutcomes,
     eventTitle: value.eventTitle.trim(),
     eventType: value.eventType,
     canonicalSummary: value.canonicalSummary.trim(),
   };
+}
+
+export function reconcilePoliticalOutcomeConflicts(
+  outcomes: PoliticalActionResolution[],
+): PoliticalActionResolution[] {
+  const effectActors = new Map<string, Set<number>>();
+  for (const outcome of outcomes) {
+    for (const effect of outcome.effects) {
+      const target = politicalEffectTarget(effect);
+      const actors = effectActors.get(target) ?? new Set<number>();
+      actors.add(outcome.actorCharacterId);
+      effectActors.set(target, actors);
+    }
+  }
+  const contestedActors = new Set(
+    [...effectActors.values()]
+      .filter((actors) => actors.size > 1)
+      .flatMap((actors) => [...actors]),
+  );
+  if (contestedActors.size === 0) return outcomes;
+
+  const contestedTargets = new Set(
+    [...effectActors.entries()]
+      .filter(([, actors]) => actors.size > 1)
+      .map(([target]) => target),
+  );
+  return outcomes.map((outcome) => {
+    if (!contestedActors.has(outcome.actorCharacterId)) return outcome;
+    const effects = outcome.effects.filter((effect) => {
+      const target = politicalEffectTarget(effect);
+      return !contestedTargets.has(target);
+    });
+    const unresolved = outcome.effects.length - effects.length;
+    return {
+      ...outcome,
+      result: effects.length === 0 ? "resisted" : "partially_executed",
+      consequence: `${outcome.consequence} ${unresolved} conflicting political effect(s) were resisted; no order received priority.`,
+      effects,
+    };
+  });
 }
 
 function characterHouse(snapshot: EngineSnapshot, characterId: number) {
@@ -1032,20 +1290,6 @@ function applySimultaneousConflicts(
       add(`war_join:${action.warId}:${actorHouseId}`, index);
     } else if (action.type === "move") {
       add(`move:${action.actorCharacterId}`, index);
-    } else if (action.type === "political_action") {
-      if (action.authorityPositionId !== null) {
-        add(`authority:${action.authorityPositionId}`, index);
-      }
-      if (action.targetLocationId !== null) {
-        add(`territory:${action.targetLocationId}`, index);
-      }
-      if (action.delegationId !== null) {
-        add(`delegation:${action.delegationId}`, index);
-      }
-      if (action.targetTitle !== null) {
-        const entityId = action.targetHouseId ?? action.targetLocationId ?? "realm";
-        add(`office:${entityId}:${action.targetTitle.toLocaleLowerCase()}`, index);
-      }
     }
   }
 

@@ -20,7 +20,9 @@ function isExecutionStatus(value: unknown): value is PlayerActionOutcome["execut
     value === "attempted" ||
     value === "executed" ||
     value === "partially_executed" ||
-    value === "failed";
+    value === "failed" ||
+    value === "resisted" ||
+    value === "delayed";
 }
 
 function parseTurnStatus(value: unknown): PlayerTurnStatus {

@@ -44,7 +44,7 @@ begin
 
   insert into public.gameplay_npc_orders (
     world_state_id, turn_number, character_id, action_data,
-    resolution_status, resolution_note
+    resolution_status, resolution_note, resolution_outcome
   )
   values (
     1,
@@ -64,13 +64,20 @@ begin
       'isPublic', false
     )),
     'accepted',
-    'Regression-test political claim.'
+    'Regression-test political claim.',
+    jsonb_build_object(
+      'actorCharacterId', actor_id,
+      'result', 'executed',
+      'consequence', 'The claim was recorded without conferring recognized authority.',
+      'effects', '[]'::jsonb
+    )
   )
   on conflict (world_state_id, turn_number, character_id)
   do update set
     action_data = excluded.action_data,
     resolution_status = excluded.resolution_status,
-    resolution_note = excluded.resolution_note;
+    resolution_note = excluded.resolution_note,
+    resolution_outcome = excluded.resolution_outcome;
 
   update public.world_state
   set turn_number = next_turn
@@ -86,6 +93,8 @@ begin
       and outcome.order_accepted is true
       and outcome.execution_status = 'executed'
       and outcome.authority_status = 'contested'
+      and outcome.resolution_plan ->> 'result' = 'executed'
+      and jsonb_typeof(outcome.state_changes) = 'array'
   ) then
     raise exception 'The accepted political attempt was not persisted with contested authority.';
   end if;

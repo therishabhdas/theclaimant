@@ -115,6 +115,7 @@ create table if not exists public.gameplay_turn_orders (
   resolution_status text not null default 'pending'
     check (resolution_status in ('pending', 'accepted', 'rejected', 'pass')),
   resolution_note text,
+  resolution_outcome jsonb,
   created_at timestamptz not null default now(),
   unique (world_state_id, turn_number, user_id),
   unique (world_state_id, turn_number, character_id),
@@ -141,10 +142,16 @@ create table if not exists public.gameplay_npc_orders (
   resolution_status text not null default 'pending'
     check (resolution_status in ('pending', 'proposed', 'accepted', 'rejected', 'pass')),
   resolution_note text,
+  resolution_outcome jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   primary key (world_state_id, turn_number, character_id)
 );
+
+alter table public.gameplay_turn_orders
+  add column if not exists resolution_outcome jsonb;
+alter table public.gameplay_npc_orders
+  add column if not exists resolution_outcome jsonb;
 
 create table if not exists public.gameplay_turn_resolutions (
   id bigint generated always as identity primary key,
@@ -172,7 +179,8 @@ create table if not exists public.gameplay_order_outcomes (
     check (decision_status in ('accepted', 'rejected', 'pass')),
   execution_status text not null
     check (execution_status in (
-      'not_attempted', 'attempted', 'executed', 'partially_executed', 'failed'
+      'not_attempted', 'attempted', 'executed', 'partially_executed',
+      'failed', 'resisted', 'delayed'
     )),
   adjudication_reason text not null,
   outcome_summary text not null,
@@ -184,6 +192,15 @@ create table if not exists public.gameplay_order_outcomes (
   resolved_at timestamptz not null default now(),
   unique (world_state_id, turn_number, actor_character_id)
 );
+
+alter table public.gameplay_order_outcomes
+  drop constraint if exists gameplay_order_outcomes_execution_status_check;
+alter table public.gameplay_order_outcomes
+  add constraint gameplay_order_outcomes_execution_status_check
+  check (execution_status in (
+    'not_attempted', 'attempted', 'executed', 'partially_executed',
+    'failed', 'resisted', 'delayed'
+  ));
 
 create table if not exists public.gameplay_order_rate_limits (
   user_id uuid primary key references auth.users(id) on delete cascade,
@@ -1007,25 +1024,46 @@ begin
     if action_data is null then
       raise exception 'GAME_INVALID_REQUEST: No submitted order exists for character %.', actor_id;
     end if;
+    if action_data -> 0 ->> 'type' = 'political_action' then
+      if jsonb_typeof(decision_row -> 'politicalOutcome') is distinct from 'object'
+        or decision_row -> 'politicalOutcome' ->> 'actorCharacterId' <> actor_id::text
+        or decision_row -> 'politicalOutcome' ->> 'result' not in (
+          'executed', 'partially_executed', 'attempted', 'failed', 'resisted', 'delayed'
+        )
+        or length(trim(coalesce(
+          decision_row -> 'politicalOutcome' ->> 'consequence', ''
+        ))) = 0
+        or length(decision_row -> 'politicalOutcome' ->> 'consequence') > 1200
+        or jsonb_typeof(decision_row -> 'politicalOutcome' -> 'effects') is distinct from 'array'
+        or jsonb_array_length(decision_row -> 'politicalOutcome' -> 'effects') > 12 then
+        raise exception 'GAME_INVALID_REQUEST: A political order requires a valid contextual outcome plan.';
+      end if;
+    elsif decision_row ? 'politicalOutcome' then
+      raise exception 'GAME_INVALID_REQUEST: Only political orders may include political outcome plans.';
+    end if;
 
     if action_data -> 0 ->> 'type' = 'wait' then
       decision_status := 'pass';
       order_message := 'The character passed for this global turn.';
     elsif decision_status = 'accept' then
+      decision_status := 'accepted';
       order_message := 'The character order was accepted for this global turn.';
     else
+      decision_status := 'rejected';
       order_message := 'The character order was not accepted for this global turn.';
     end if;
 
     update public.gameplay_turn_orders
     set resolution_status = decision_status,
-        resolution_note = decision_row ->> 'reason'
+        resolution_note = decision_row ->> 'reason',
+        resolution_outcome = decision_row -> 'politicalOutcome'
     where world_state_id = 1
       and turn_number = p_turn_number
       and character_id = actor_id;
     update public.gameplay_npc_orders
     set resolution_status = decision_status,
         resolution_note = decision_row ->> 'reason',
+        resolution_outcome = decision_row -> 'politicalOutcome',
         updated_at = now()
     where world_state_id = 1
       and turn_number = p_turn_number
@@ -1118,6 +1156,34 @@ begin
         with ordinality as change(value, ordinality)
       where change.value #>> '{target,type}' = 'character'
         and change.value #>> '{target,id}' = actor_id::text;
+    elsif original_action ->> 'type' = 'political_action' then
+      select political.execution_status, political.consequence, political.state_changes
+      into political_outcome
+      from public.political_action_outcomes as political
+      where political.world_state_id = 1
+        and political.turn_number = p_turn_number
+        and political.actor_character_id = actor_id;
+
+      if found then
+        execution_status := political_outcome.execution_status;
+        action_executed := political_outcome.execution_status in (
+          'executed', 'partially_executed'
+        );
+        outcome_summary := political_outcome.consequence;
+        actor_state_changes := jsonb_build_array(jsonb_build_object(
+          'changeType', 'political_action_outcome',
+          'description', political_outcome.consequence,
+          'structuredChange', jsonb_build_object(
+            'executionStatus', political_outcome.execution_status,
+            'authorityStatus', political_outcome.authority_status,
+            'stateChanges', political_outcome.state_changes
+          )
+        ));
+      else
+        execution_status := 'attempted';
+        outcome_summary :=
+          'The order was accepted as an attempt; no political outcome was recorded.';
+      end if;
     elsif decision_status = 'rejected' then
       execution_status := 'failed';
       outcome_summary := 'The order was not carried out during this world turn.';
@@ -1127,31 +1193,6 @@ begin
         with ordinality as change(value, ordinality)
       where change.value #>> '{target,type}' = 'character'
         and change.value #>> '{target,id}' = actor_id::text;
-    elsif original_action ->> 'type' = 'political_action' then
-      select political.execution_status, political.consequence
-      into political_outcome
-      from public.political_action_outcomes as political
-      where political.world_state_id = 1
-        and political.turn_number = p_turn_number
-        and political.actor_character_id = actor_id;
-
-      if found then
-        execution_status := political_outcome.execution_status;
-        action_executed := political_outcome.execution_status = 'executed';
-        outcome_summary := political_outcome.consequence;
-        actor_state_changes := jsonb_build_array(jsonb_build_object(
-          'changeType', 'political_action_outcome',
-          'description', political_outcome.consequence,
-          'structuredChange', jsonb_build_object(
-            'executionStatus', political_outcome.execution_status,
-            'authorityStatus', political_outcome.authority_status
-          )
-        ));
-      else
-        execution_status := 'attempted';
-        outcome_summary :=
-          'The order was accepted as an attempt; no political outcome was recorded.';
-      end if;
     else
       select coalesce(character.current_house_id, character.starting_house_id)
       into actor_house_id

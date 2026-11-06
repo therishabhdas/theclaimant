@@ -159,8 +159,12 @@ and uncertain appointments remain unknown rather than being inferred.
 Political actions are submitted and resolved alongside other global-turn
 orders. The engine checks action shape, ownership, and valid targets without
 requiring office or liege permission. The world resolver considers combined
-circumstances; resulting attempts, executions, territorial control,
-recognition, and unresolved detentions are persisted with the turn event.
+circumstances and returns a structured outcome plan for every political
+attempt. The database validates and commits supported effects, then persists
+the actual previous and resulting states in the actor's private outcome.
+Claims and appointments remain contested records until separately recognized;
+an attempted seizure does not transfer territorial control without a battle,
+siege, or surrender resolution. Imprisonment records an attempt, not custody.
 Authority and delegations are included in character-scoped AI prompts only
 when public or directly held by that character; the master resolver receives
 the authoritative state. The influence view derives practical leverage from
@@ -303,10 +307,15 @@ The rollback-only
 regression checks an accepted claim, contested authority, persisted
 political outcomes, and the 40-character/30-location catalogue invariant.
 The rollback-only
+[`supabase/tests/political-context-resolution.test.sql`](./supabase/tests/political-context-resolution.test.sql)
+regression checks competing claims, resisted removal, conditional delegation
+revocation, contested seizure, and a partial challenge with persisted state
+changes.
+The rollback-only
 [`supabase/tests/player-specific-outcomes.test.sql`](./supabase/tests/player-specific-outcomes.test.sql)
-regression resolves a shared pass turn and checks that every player and NPC
-receives a persisted outcome while private details remain inaccessible to
-authenticated database clients.
+regression checks a player's persisted political claim and scoped outcome,
+ensures every player and NPC receives an outcome, and verifies private details
+remain inaccessible to authenticated database clients.
 
 Start the local development server:
 
