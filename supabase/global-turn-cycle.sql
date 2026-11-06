@@ -1006,12 +1006,14 @@ begin
     where order_row.world_state_id = 1
       and order_row.turn_number = p_turn_number
       and order_row.resolution_status = 'accepted'
+      and order_row.action_data -> 0 ->> 'type' <> 'political_action'
     union all
     select npc.character_id as actor_id, npc.action_data -> 0 as action
     from public.gameplay_npc_orders as npc
     where npc.world_state_id = 1
       and npc.turn_number = p_turn_number
       and npc.resolution_status = 'accepted'
+      and npc.action_data -> 0 ->> 'type' <> 'political_action'
   ) as accepted;
   committed_actions := coalesce(committed_actions, '[]'::jsonb);
 

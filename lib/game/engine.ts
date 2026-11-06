@@ -38,6 +38,21 @@ export const DIPLOMACY_RELATION_TYPES = [
   "other",
 ] as const;
 
+export const POLITICAL_ACTION_OPERATIONS = [
+  "claim_title",
+  "appoint",
+  "remove",
+  "delegate",
+  "revoke_delegation",
+  "seize_location",
+  "recognize",
+  "challenge",
+  "overthrow",
+  "imprison",
+  "defy",
+  "betray",
+] as const;
+
 export type GameEventType = (typeof GAME_EVENT_TYPES)[number];
 export type SupportedTurnEventType = (typeof SUPPORTED_TURN_EVENT_TYPES)[number];
 export type DiplomacyRelationType = (typeof DIPLOMACY_RELATION_TYPES)[number];
@@ -86,6 +101,19 @@ export type GameAction =
       actorCharacterId: number;
       warId: number;
       side: string;
+    }
+  | {
+      type: "political_action";
+      actorCharacterId: number;
+      operation: (typeof POLITICAL_ACTION_OPERATIONS)[number];
+      targetCharacterId: number | null;
+      targetHouseId: number | null;
+      targetLocationId: number | null;
+      authorityPositionId: number | null;
+      delegationId: number | null;
+      targetTitle: string | null;
+      details: string;
+      isPublic: boolean;
     }
   | {
       type: "wait";
@@ -178,6 +206,21 @@ export type EngineWar = {
   participants: EngineWarParticipant[];
 };
 
+export type EnginePoliticalPosition = {
+  id: number;
+  status: "active" | "vacant" | "contested" | "suspended" | "removed" | "unknown";
+};
+
+export type EnginePoliticalDelegation = {
+  id: number;
+  status: "active" | "revoked" | "expired" | "contested" | "unknown";
+};
+
+export type EngineLocation = {
+  id: number;
+  regionId: number | null;
+};
+
 export type EngineSnapshot = {
   revision: number;
   turnNumber: number;
@@ -201,6 +244,9 @@ export type EngineSnapshot = {
   musterOrders: EngineMusterOrder[];
   diplomacy: EngineDiplomacyRecord[];
   wars: EngineWar[];
+  locations?: EngineLocation[];
+  politicalPositions?: EnginePoliticalPosition[];
+  politicalDelegations?: EnginePoliticalDelegation[];
 };
 
 export type GameTurnResult = {
@@ -236,6 +282,10 @@ function isPositiveInteger(value: unknown): value is number {
 
 function isPositivePgInteger(value: unknown): value is number {
   return isPositiveInteger(value) && value <= 2_147_483_647;
+}
+
+function isNullablePositivePgInteger(value: unknown): value is number | null {
+  return value === null || isPositivePgInteger(value);
 }
 
 function isPositiveSmallint(value: unknown): value is number {
@@ -377,6 +427,47 @@ function parseAction(value: unknown, index: number): GameAction {
         actorCharacterId: value.actorCharacterId,
         warId: value.warId,
         side: value.side,
+      };
+    case "political_action":
+      if (
+        !hasExactKeys(value, [
+          "type",
+          "actorCharacterId",
+          "operation",
+          "targetCharacterId",
+          "targetHouseId",
+          "targetLocationId",
+          "authorityPositionId",
+          "delegationId",
+          "targetTitle",
+          "details",
+          "isPublic",
+        ]) ||
+        !isPositivePgInteger(value.actorCharacterId) ||
+        !isOneOf(value.operation, POLITICAL_ACTION_OPERATIONS) ||
+        !isNullablePositivePgInteger(value.targetCharacterId) ||
+        !isNullablePositivePgInteger(value.targetHouseId) ||
+        !isNullablePositivePgInteger(value.targetLocationId) ||
+        !isNullablePositivePgInteger(value.authorityPositionId) ||
+        !isNullablePositivePgInteger(value.delegationId) ||
+        !(value.targetTitle === null || isText(value.targetTitle, 160)) ||
+        !isText(value.details, 2000) ||
+        typeof value.isPublic !== "boolean"
+      ) {
+        throw new Error(`Action ${index + 1} has an invalid shape.`);
+      }
+      return {
+        type: "political_action",
+        actorCharacterId: value.actorCharacterId,
+        operation: value.operation,
+        targetCharacterId: value.targetCharacterId,
+        targetHouseId: value.targetHouseId,
+        targetLocationId: value.targetLocationId,
+        authorityPositionId: value.authorityPositionId,
+        delegationId: value.delegationId,
+        targetTitle: value.targetTitle,
+        details: value.details.trim(),
+        isPublic: value.isPublic,
       };
     case "wait":
       if (
@@ -558,7 +649,16 @@ function validateAction(
     case "muster": {
       const houseId = actor ? characterHouse(simulated, actor.id) : null;
       const house = simulated.houses.find((candidate) => candidate.id === houseId);
-      if (!houseId || !house || house.regionId !== action.regionId) {
+      const actorRegionId = actor?.currentLocationId === null || actor?.currentLocationId === undefined
+        ? null
+        : simulated.locations?.find((location) =>
+          location.id === actor.currentLocationId,
+        )?.regionId ?? null;
+      if (
+        !houseId ||
+        !house ||
+        (house.regionId !== action.regionId && actorRegionId !== action.regionId)
+      ) {
         errors.push(`Character ${action.actorCharacterId} cannot muster forces in region ${action.regionId}.`);
         return;
       }
@@ -721,6 +821,77 @@ function validateAction(
       war.participants.push({ houseId: actorHouseId, side: action.side });
       return;
     }
+    case "political_action": {
+      const targetCharacterExists = action.targetCharacterId === null ||
+        simulated.characters.some((candidate) => candidate.id === action.targetCharacterId);
+      const targetHouseExists = action.targetHouseId === null ||
+        simulated.houses.some((candidate) => candidate.id === action.targetHouseId);
+      const targetLocationExists = action.targetLocationId === null ||
+        simulated.locations?.some((candidate) => candidate.id === action.targetLocationId) === true;
+      const position = action.authorityPositionId === null
+        ? null
+        : simulated.politicalPositions?.find((candidate) =>
+          candidate.id === action.authorityPositionId,
+        );
+      const delegation = action.delegationId === null
+        ? null
+        : simulated.politicalDelegations?.find((candidate) =>
+          candidate.id === action.delegationId,
+        );
+      const activePosition = position !== null && position !== undefined &&
+        !["vacant", "removed"].includes(position.status);
+
+      if (!targetCharacterExists || !targetHouseExists || !targetLocationExists) {
+        errors.push("The political action names a character, house, or location that does not exist.");
+        return;
+      }
+
+      switch (action.operation) {
+        case "claim_title":
+          if (!action.targetTitle) errors.push("A title claim requires a title.");
+          return;
+        case "appoint":
+          if (action.targetCharacterId === null || !action.targetTitle) {
+            errors.push("An appointment requires a character and a position title.");
+          }
+          return;
+        case "remove":
+        case "recognize":
+        case "challenge":
+        case "overthrow":
+        case "defy":
+          if (!activePosition) {
+            errors.push("The political action requires an existing, non-vacant authority position.");
+          }
+          return;
+        case "delegate":
+          if (!activePosition || action.targetCharacterId === null ||
+              action.targetCharacterId === actor.id) {
+            errors.push("Delegation requires an existing position and a different delegate.");
+          }
+          return;
+        case "revoke_delegation":
+          if (!delegation || delegation.status !== "active") {
+            errors.push("The delegation is not active.");
+          }
+          return;
+        case "seize_location":
+          if (action.targetLocationId === null || actor.currentHouseId === null) {
+            errors.push("Seizing a location requires an existing location and an associated house.");
+          }
+          return;
+        case "imprison":
+          if (action.targetCharacterId === null || action.targetCharacterId === actor.id) {
+            errors.push("An imprisonment attempt requires a different target character.");
+          }
+          return;
+        case "betray":
+          if (action.targetCharacterId === null && action.targetHouseId === null) {
+            errors.push("A betrayal must identify a character or house.");
+          }
+          return;
+      }
+    }
     case "wait":
       return;
   }
@@ -861,6 +1032,20 @@ function applySimultaneousConflicts(
       add(`war_join:${action.warId}:${actorHouseId}`, index);
     } else if (action.type === "move") {
       add(`move:${action.actorCharacterId}`, index);
+    } else if (action.type === "political_action") {
+      if (action.authorityPositionId !== null) {
+        add(`authority:${action.authorityPositionId}`, index);
+      }
+      if (action.targetLocationId !== null) {
+        add(`territory:${action.targetLocationId}`, index);
+      }
+      if (action.delegationId !== null) {
+        add(`delegation:${action.delegationId}`, index);
+      }
+      if (action.targetTitle !== null) {
+        const entityId = action.targetHouseId ?? action.targetLocationId ?? "realm";
+        add(`office:${entityId}:${action.targetTitle.toLocaleLowerCase()}`, index);
+      }
     }
   }
 

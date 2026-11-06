@@ -8,7 +8,11 @@ Preserve established facts and chronology. A missing or null value means unknown
 
 Choose exactly one primary action for the designated actor. Never choose actions for another character. A recorded suspicion supplies clues and uncertainty only, not the canonical truth. A misbelief supplies the incorrect belief only. Forgotten facts are not current knowledge.
 
-The seven-day global turn is shared by all players. Orders are submitted simultaneously; do not assume another order has already happened. Supported mechanical actions are travel, mustering, diplomacy proposals and their resolution, war declarations and participation, and waiting. Use wait when no supported action is justified.`;
+The seven-day global turn is shared by all players. Orders are submitted simultaneously; do not assume another order has already happened. Supported actions include travel, mustering, diplomacy proposals and their resolution, war declarations and participation, political claims, appointments, removals, delegations, territorial seizures, recognition, challenges, imprisonment attempts, defiance, betrayal, and waiting.
+
+Authority determines legitimacy; influence determines leverage; circumstances determine outcomes. Titles do not compel obedience. Consider actual resources, military command, alliances, relationships, loyalties, reputation, fear, information, geography, incentives, and each character's ability to respond. Characters may attempt actions without permission, but an attempt is not proof of success, control, recognition, or obedience. Make political actions specific, preserve uncertainty, and allow deception, concealed intentions, broken promises, and betrayal when consistent with the actor's knowledge and interests.
+
+A political_action must contain exactly these fields: type, actorCharacterId, operation, targetCharacterId, targetHouseId, targetLocationId, authorityPositionId, delegationId, targetTitle, details, and isPublic. Use null for unused targets. Operations are claim_title, appoint, remove, delegate, revoke_delegation, seize_location, recognize, challenge, overthrow, imprison, defy, and betray. Use existing IDs from the supplied context; never invent IDs. A claim or appointment records a claim or disputed position, not automatic legitimacy. Imprisonment and overthrow orders record attempts unless circumstances establish a result.`;
 
 export type GroqGamePromptContext = {
   publicWorldContext: string;
@@ -50,7 +54,7 @@ export function buildWorldTurnResolutionPrompt(input: {
   return {
     system: `You are the authoritative game master resolving one shared weekly turn in The Claimant.
 
-The supplied world context is confidential and may contain facts unknown to individual characters. Use it only to adjudicate the simultaneously submitted structured orders. Do not treat any order as having happened before another, and do not resolve orders in sequence. Decide whether each order is accepted or rejected based on the opening world snapshot and the combined consequences of all orders. If a simultaneous conflict cannot be reconciled, reject all conflicting orders; never give an advantage based on list order.
+The supplied world context is confidential and may contain facts unknown to individual characters. Use it only to adjudicate the simultaneously submitted structured orders. Do not treat any order as having happened before another, and do not resolve orders in sequence. Decide whether each order is accepted or rejected based on the opening world snapshot and the combined consequences of all orders. For political actions, acceptance records an attempted act; the database separately records whether an immediate effect occurred and whether authority is recognized or contested. A claim or appointment never automatically establishes legitimacy. If a simultaneous conflict cannot be reconciled, reject all conflicting orders; never give an advantage based on list order.
 
 Return exactly one JSON object with exactly these fields:
 {

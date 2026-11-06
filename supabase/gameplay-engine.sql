@@ -454,6 +454,10 @@ begin
       if not exists (
         select 1 from public.houses
         where id = actor_house_id and houses.region_id = v_region_id
+      ) and not exists (
+        select 1 from public.playable_locations as location
+        where location.id = actor.current_location_id
+          and location.world_region_id = v_region_id
       ) then
         raise exception 'GAME_INVALID_ACTION: The actor cannot muster in that region.';
       end if;

@@ -260,6 +260,7 @@ export async function loadWorldContext(playerUserId?: string): Promise<string> {
     secretKnowledge,
     characterKnowledge,
     claims,
+    militaryOrders,
     wars,
     warParticipants,
     regionalMilitaryEstimates,
@@ -270,6 +271,14 @@ export async function loadWorldContext(playerUserId?: string): Promise<string> {
     eventHouses,
     eventLocations,
     eventStateChanges,
+    politicalEntities,
+    politicalAuthorityPositions,
+    politicalAuthorityRecognitions,
+    politicalDelegations,
+    politicalAuthorityHistory,
+    politicalActionOutcomes,
+    politicalDetentions,
+    characterPoliticalInfluence,
     player,
   ] = await Promise.all([
     readFile(join(process.cwd(), "theclaimant_starting_reference.txt"), "utf8"),
@@ -302,6 +311,7 @@ export async function loadWorldContext(playerUserId?: string): Promise<string> {
       "playable character knowledge",
     ),
     readRows(supabase.from("political_claims").select("*"), "political claims"),
+    readRows(supabase.from("game_muster_orders").select("*"), "military orders"),
     readRows(supabase.from("world_wars").select("*"), "wars"),
     readRows(supabase.from("war_participants").select("*"), "war participants"),
     readRows(
@@ -327,6 +337,35 @@ export async function loadWorldContext(playerUserId?: string): Promise<string> {
       supabase.from("event_state_changes").select("*"),
       "event state changes",
     ),
+    readRows(supabase.from("political_entities").select("*"), "political entities"),
+    readRows(
+      supabase.from("political_authority_positions").select("*"),
+      "political authority positions",
+    ),
+    readRows(
+      supabase.from("political_authority_recognitions").select("*"),
+      "political authority recognitions",
+    ),
+    readRows(
+      supabase.from("political_delegations").select("*"),
+      "political delegations",
+    ),
+    readRows(
+      supabase.from("political_authority_history").select("*"),
+      "political authority history",
+    ),
+    readRows(
+      supabase.from("political_action_outcomes").select("*"),
+      "political action outcomes",
+    ),
+    readRows(
+      supabase.from("political_detentions").select("*"),
+      "political detentions",
+    ),
+    readRows(
+      supabase.from("character_political_influence").select("*"),
+      "character political influence",
+    ),
     playerState,
   ]);
 
@@ -344,6 +383,7 @@ export async function loadWorldContext(playerUserId?: string): Promise<string> {
     secretKnowledge,
     characterKnowledge,
     claims,
+    militaryOrders,
     wars,
     warParticipants,
     regionalMilitaryEstimates,
@@ -354,6 +394,14 @@ export async function loadWorldContext(playerUserId?: string): Promise<string> {
     eventHouses,
     eventLocations,
     eventStateChanges,
+    politicalEntities,
+    politicalAuthorityPositions,
+    politicalAuthorityRecognitions,
+    politicalDelegations,
+    politicalAuthorityHistory,
+    politicalActionOutcomes,
+    politicalDetentions,
+    characterPoliticalInfluence,
     playerState: player,
   });
 }

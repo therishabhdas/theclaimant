@@ -140,6 +140,33 @@ each global turn, AI order storage for unassigned characters, and the atomic
 weekly resolution procedure. Run both after the world-state, opening-state,
 and travel migrations.
 
+After both gameplay scripts, run
+[`supabase/political-authority.sql`](./supabase/political-authority.sql).
+It creates extensible political entities, offices, recognition and dispute
+states, delegations, authority history, action outcomes, and a derived
+influence view. Its opening records are sourced from the existing character,
+house, region, location, and canonical starting-reference state; it does not
+add playable characters or locations. The Crown remains vacant and disputed
+after Robert's death, Joffrey is recorded only as the court-recognized heir,
+and uncertain appointments remain unknown rather than being inferred.
+
+Political actions are submitted and resolved alongside other global-turn
+orders. The engine checks action shape, ownership, and valid targets without
+requiring office or liege permission. The world resolver considers combined
+circumstances; resulting attempts, executions, territorial control,
+recognition, and unresolved detentions are persisted with the turn event.
+Authority and delegations are included in character-scoped AI prompts only
+when public or directly held by that character; the master resolver receives
+the authoritative state. The influence view derives practical leverage from
+existing house resources, muster orders, relationships, and territory rather
+than creating duplicate balances.
+
+For an existing database, apply the current versions of
+[`supabase/gameplay-engine.sql`](./supabase/gameplay-engine.sql) and
+[`supabase/global-turn-cycle.sql`](./supabase/global-turn-cycle.sql) before the
+political-authority migration so non-political commits and political attempts
+are routed through their respective atomic resolution paths.
+
 The scripts create the workbook-backed route graph, linked route alternatives
 and legs, waypoint and source records, travel assumptions, and campaign
 journey tables, and archive the workbook rows. They expect the 30 workbook
@@ -265,6 +292,10 @@ can be run in the Supabase SQL editor. It checks active-lease exclusion,
 expired-lease reclamation, token rotation, idempotent NPC-order retries,
 renewal, and stale-worker write, release, and commit rejection; it rolls back
 all setup changes.
+The rollback-only
+[`supabase/tests/political-authority.test.sql`](./supabase/tests/political-authority.test.sql)
+regression checks an accepted claim, contested authority, persisted
+political outcomes, and the 40-character/30-location catalogue invariant.
 
 Start the local development server:
 

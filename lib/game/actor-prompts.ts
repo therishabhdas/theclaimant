@@ -215,6 +215,7 @@ export async function loadGroqCharacterPrompts(
     worldState,
     regions,
     houses,
+    houseLocationRelations,
     locations,
     characters,
     assignments,
@@ -231,6 +232,12 @@ export async function loadGroqCharacterPrompts(
     musterRules,
     diplomacy,
     journeyParticipants,
+    politicalEntities,
+    politicalPositions,
+    politicalDelegations,
+    politicalRecognitions,
+    politicalInfluence,
+    musterOrders,
   ] = await Promise.all([
     client.from("game_events").select(
       "id, occurred_at, world_date_label, event_type, title, public_summary, character_knowledge",
@@ -242,8 +249,12 @@ export async function loadGroqCharacterPrompts(
       "id, name, current_situation, opening_situation",
     ), "world regions"),
     readRows(client.from("houses").select(
-      "id, name, region_id, seat_name, house_words, opening_head, opening_summary, current_summary",
+      "id, name, region_id, liege_house_id, seat_name, house_words, opening_head, " +
+      "opening_summary, current_summary, treasury_amount, army_size",
     ), "houses"),
+    readRows(client.from("house_location_relations").select(
+      "house_id, location_id, relation_type",
+    ), "house and location control"),
     readRows(client.from("playable_locations").select(
       "id, name, region, location_type, world_region_id",
     ), "locations"),
@@ -252,7 +263,7 @@ export async function loadGroqCharacterPrompts(
       "opening_relationships, gameplay_focus, opening_status, current_status, opening_life_status, " +
       "current_life_status, opening_presence, current_location_id, current_house_id, " +
       "starting_house_id, world_region_id",
-    ).in("id", actorIds), "acting characters"),
+    ), "characters"),
     readRows(client.from("user_character_assignments").select(
       "user_id, character_id, current_location_id, resources, personality",
     ).in(
@@ -302,6 +313,32 @@ export async function loadGroqCharacterPrompts(
       .in("character_id", actorIds)
       .in("participation_status", ["travelling", "joined"]),
     "active journey participants"),
+    readRows(client.from("political_entities").select(
+      "id, entity_type, name, house_id, region_id, location_id, institution_key",
+    ), "political entities"),
+    readRows(client.from("political_authority_positions").select(
+      "id, entity_id, character_id, position_name, responsibilities, scope_region_id, " +
+      "scope_location_id, appointment_basis, position_status, recognition_status, " +
+      "is_disputed, is_public, valid_from_turn, valid_through_turn",
+    ), "political authority positions"),
+    readRows(client.from("political_delegations").select(
+      "id, authority_position_id, delegator_character_id, delegate_character_id, " +
+      "responsibilities, scope_region_id, scope_location_id, status, recognition_status, " +
+      "is_public, starts_turn, ends_turn",
+    ), "political delegations"),
+    readRows(client.from("political_authority_recognitions").select(
+      "authority_position_id, recognized_by_character_id, recognition_status, is_public, turn_number",
+    ), "political authority recognitions"),
+    readRows(client.from("character_political_influence").select(
+      "character_id, political_reputation, diplomatic_reputation, legitimacy, " +
+      "associated_house_wealth, associated_house_force, recognized_offices, " +
+      "recognized_delegated_responsibilities, personal_loyalty_support, active_alliances, forces_personally_mustered, " +
+      "controlled_locations, known_leverage_facts",
+    ).in("character_id", actorIds), "character political influence"),
+    readRows(client.from("game_muster_orders").select(
+      "id, requested_by_character_id, region_id, force_size, required_days, " +
+      "elapsed_days, status",
+    ).in("requested_by_character_id", actorIds), "character military orders"),
   ]);
   if (eventResponse.error) {
     throw new Error(`Unable to load the game event log: ${eventResponse.error.message}`);
@@ -313,6 +350,7 @@ export async function loadGroqCharacterPrompts(
   const worldRows = worldState;
   const regionRows = regions;
   const houseRows = houses;
+  const houseLocationRelationRows = houseLocationRelations;
   const locationRows = locations;
   const characterRows = characters;
   const assignmentRows = assignments;
@@ -329,6 +367,12 @@ export async function loadGroqCharacterPrompts(
   const musterRuleRows = musterRules;
   const diplomacyRows = diplomacy;
   const journeyParticipantRows = journeyParticipants;
+  const politicalEntityRows = politicalEntities;
+  const politicalPositionRows = politicalPositions;
+  const politicalDelegationRows = politicalDelegations;
+  const politicalRecognitionRows = politicalRecognitions;
+  const politicalInfluenceRows = politicalInfluence;
+  const musterOrderRows = musterOrders;
   const eventRows = eventResponse.data.map((event) => ({
     id: numberField(event, "id") ?? 0,
     occurredAt: stringField(event, "occurred_at") ?? "",
@@ -440,6 +484,44 @@ export async function loadGroqCharacterPrompts(
     houseB: houseNameById.get(numberField(record, "house_b_id") ?? -1) ?? null,
     summary: record.public_summary,
   }));
+  const politicalEntityById = new Map(politicalEntityRows.flatMap((entity) => {
+    const id = numberField(entity, "id");
+    const name = stringField(entity, "name");
+    return id !== null && name !== null ? [[id, name] as const] : [];
+  }));
+  const publicAuthority = politicalPositionRows
+    .filter((position) => position.is_public === true)
+    .map((position) => ({
+      id: position.id,
+      position: position.position_name,
+      holder: characterRows.find((character) =>
+        numberField(character, "id") === numberField(position, "character_id"),
+      )?.display_name ?? null,
+      entity: politicalEntityById.get(numberField(position, "entity_id") ?? -1) ?? null,
+      responsibilities: position.responsibilities,
+      scopeRegion:
+        regionNameById.get(numberField(position, "scope_region_id") ?? -1) ?? null,
+      scopeLocation:
+        locationRows.find((location) =>
+          numberField(location, "id") === numberField(position, "scope_location_id"),
+        )?.name ?? null,
+      status: position.position_status,
+      recognition: position.recognition_status,
+      disputed: position.is_disputed,
+    }));
+  const publicDelegations = politicalDelegationRows
+    .filter((delegation) => delegation.is_public === true)
+    .map((delegation) => pick(delegation, [
+      "id",
+      "authority_position_id", "delegator_character_id", "delegate_character_id",
+      "responsibilities", "status", "recognition_status",
+    ]));
+  const publicRecognitions = politicalRecognitionRows
+      .filter((recognition) => recognition.is_public === true)
+      .map((recognition) => pick(recognition, [
+        "authority_position_id", "recognized_by_character_id",
+        "recognition_status", "turn_number",
+      ]));
   const publicWorldContext = format({
     world: worldRows.map((row) => pick(row, [
       "turn_number", "elapsed_days", "date_description", "season",
@@ -454,6 +536,8 @@ export async function loadGroqCharacterPrompts(
         "opening_summary", "current_summary",
       ]),
       region: regionNameById.get(numberField(row, "region_id") ?? -1) ?? null,
+      liegeHouse:
+        houseNameById.get(numberField(row, "liege_house_id") ?? -1) ?? null,
     })),
     publicCharacters: characterRows.map((row) => pick(row, [
       "id", "display_name", "aliases", "playable_group", "region",
@@ -464,6 +548,17 @@ export async function loadGroqCharacterPrompts(
     ])),
     publicWars,
     publicDiplomacy,
+    currentTerritorialControl: houseLocationRelationRows
+      .filter((relation) => relation.relation_type === "current_control")
+      .map((relation) => ({
+        house: houseNameById.get(numberField(relation, "house_id") ?? -1) ?? null,
+        location: locationRows.find((location) =>
+          numberField(location, "id") === numberField(relation, "location_id"),
+        )?.name ?? null,
+      })),
+    politicalAuthority: publicAuthority,
+    publicDelegations,
+    publicRecognitions,
     militaryEstimates: estimateRows.map((row) => pick(row, [
       "region_id", "force_name", "force_type", "minimum_strength",
       "maximum_strength", "confidence_level", "readiness_status", "summary",
@@ -489,6 +584,45 @@ export async function loadGroqCharacterPrompts(
     const actorRow = actor.character;
     const houseId = numberField(actorRow, "current_house_id")
       ?? numberField(actorRow, "starting_house_id");
+    const knownAuthorityPositions = politicalPositionRows
+      .filter((position) =>
+        position.is_public === true ||
+        numberField(position, "character_id") === request.actorCharacterId,
+      )
+      .map((position) => ({
+        ...pick(position, [
+          "id", "position_name", "responsibilities", "appointment_basis",
+          "position_status", "recognition_status", "is_disputed",
+          "valid_from_turn", "valid_through_turn",
+        ]),
+        entity: politicalEntityById.get(numberField(position, "entity_id") ?? -1) ?? null,
+        scopeRegion:
+          regionNameById.get(numberField(position, "scope_region_id") ?? -1) ?? null,
+        scopeLocation:
+          locationRows.find((location) =>
+            numberField(location, "id") === numberField(position, "scope_location_id"),
+          )?.name ?? null,
+      }));
+    const actorDelegations = politicalDelegationRows
+      .filter((delegation) =>
+        delegation.is_public === true ||
+        numberField(delegation, "delegator_character_id") === request.actorCharacterId ||
+        numberField(delegation, "delegate_character_id") === request.actorCharacterId,
+      )
+      .map((delegation) => pick(delegation, [
+        "authority_position_id", "delegator_character_id", "delegate_character_id",
+        "responsibilities", "status", "recognition_status", "starts_turn", "ends_turn",
+      ]));
+    const actorRecognitions = politicalRecognitionRows
+      .filter((recognition) =>
+        recognition.is_public === true ||
+        numberField(recognition, "recognized_by_character_id") === request.actorCharacterId,
+      )
+      .map((recognition) => pick(recognition, [
+        "authority_position_id", "recognized_by_character_id",
+        "recognition_status", "turn_number",
+      ]));
+    const actorHouse = houseRows.find((house) => numberField(house, "id") === houseId);
     const actorContext = {
       character: {
         ...pick(actorRow, [
@@ -522,6 +656,33 @@ export async function loadGroqCharacterPrompts(
       claims: claimRows.filter((claim) =>
         numberField(claim, "claimant_character_id") === request.actorCharacterId,
       ).map((row) => pick(row, ["target_title", "claim_status", "summary"])),
+      politicalAuthority: knownAuthorityPositions,
+      delegations: actorDelegations,
+      recognitions: actorRecognitions,
+      practicalInfluence: (() => {
+        const influence = politicalInfluenceRows.find((row) =>
+          numberField(row, "character_id") === request.actorCharacterId,
+        );
+        return influence
+          ? pick(influence, [
+            "political_reputation", "diplomatic_reputation", "legitimacy",
+            "associated_house_wealth", "associated_house_force", "recognized_offices",
+            "recognized_delegated_responsibilities", "active_alliances",
+            "forces_personally_mustered", "controlled_locations", "known_leverage_facts",
+          ])
+          : null;
+      })(),
+      militaryOrders: musterOrderRows.filter((row) =>
+        numberField(row, "requested_by_character_id") === request.actorCharacterId,
+      ).map((row) => pick(row, [
+        "id", "region_id", "force_size", "required_days", "elapsed_days", "status",
+      ])),
+      currentHouseResources: actorHouse
+        ? pick(actorHouse, ["treasury_amount", "army_size"])
+        : null,
+      liegeHouse: houseNameById.get(
+        numberField(actorHouse ?? {}, "liege_house_id") ?? -1,
+      ) ?? null,
       privateDiplomacy: diplomacyRows.filter((record) =>
         numberField(record, "character_a_id") === request.actorCharacterId ||
         numberField(record, "character_b_id") === request.actorCharacterId,

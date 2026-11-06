@@ -14,6 +14,8 @@ import {
   simulateSimultaneousWorldTurn,
   type DiplomacyRelationType,
   type EngineDiplomacyRecord,
+  type EnginePoliticalDelegation,
+  type EnginePoliticalPosition,
   type EngineJourney,
   type EngineMusterOrder,
   type EngineRoute,
@@ -154,7 +156,8 @@ async function loadEngineSnapshot(
 ): Promise<{ snapshot: EngineSnapshot; characterId: number | null }> {
   const [assignmentRows, stateRows, characterRows, assignments, houses, routeRows,
     routeLegRows, edgeRows, journeyRows, participantRows, estimateRows, ruleRows, musterRows, diplomacyRows,
-    warRows, warParticipantRows] = await Promise.all([
+    warRows, warParticipantRows, locationRows, politicalPositionRows,
+    politicalDelegationRows] = await Promise.all([
     userId === null
       ? Promise.resolve([])
       : readRows(
@@ -229,6 +232,18 @@ async function loadEngineSnapshot(
     readRows(
       client.from("war_participants").select("war_id, house_id, side"),
       "war participants",
+    ),
+    readRows(
+      client.from("playable_locations").select("id, world_region_id"),
+      "political locations",
+    ),
+    readRows(
+      client.from("political_authority_positions").select("id, position_status"),
+      "political authority positions",
+    ),
+    readRows(
+      client.from("political_delegations").select("id, status"),
+      "political delegations",
     ),
   ]);
 
@@ -404,6 +419,26 @@ async function loadEngineSnapshot(
       participants,
     };
   });
+  const politicalPositions: EnginePoliticalPosition[] = politicalPositionRows.map((row) => {
+    const status = stringField(row, "position_status", "political authority position");
+    if (!["active", "vacant", "contested", "suspended", "removed", "unknown"].includes(status)) {
+      throw new Error("A political authority position has an unsupported status.");
+    }
+    return {
+      id: numberField(row, "id", "political authority position"),
+      status: status as EnginePoliticalPosition["status"],
+    };
+  });
+  const politicalDelegations: EnginePoliticalDelegation[] = politicalDelegationRows.map((row) => {
+    const status = stringField(row, "status", "political delegation");
+    if (!["active", "revoked", "expired", "contested", "unknown"].includes(status)) {
+      throw new Error("A political delegation has an unsupported status.");
+    }
+    return {
+      id: numberField(row, "id", "political delegation"),
+      status: status as EnginePoliticalDelegation["status"],
+    };
+  });
 
   const state = stateRows[0];
   const snapshot: EngineSnapshot = {
@@ -446,6 +481,12 @@ async function loadEngineSnapshot(
     }),
     diplomacy,
     wars,
+    locations: locationRows.map((row) => ({
+      id: numberField(row, "id", "political location"),
+      regionId: nullableNumberField(row, "world_region_id", "political location"),
+    })),
+    politicalPositions,
+    politicalDelegations,
   };
   return { snapshot, characterId };
 }
